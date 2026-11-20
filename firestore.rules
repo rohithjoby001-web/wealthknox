@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Every person's data lives under users/{uid}/... (their sources, incomes,
+// expenses, goals, plus a small settings doc at users/{uid} itself). This
+// rule is the only thing standing between one person's data and everyone
+// else's, so it simply says: you may read or write a document under your
+// own uid, signed in as that uid, and nothing else, for anyone.
+//
+// Paste this into: Firebase console -> Firestore Database -> Rules tab ->
+// replace the whole editor with this -> Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}
