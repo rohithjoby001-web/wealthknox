@@ -12,7 +12,7 @@
   /* The one accent — used only for the hero icon, the healthy-spend
      gauge fill, and the active nav tab. Everything else in the system
      stays monochrome on purpose; see note at the top of this file. */
-  --accent:#0000FF; --accent-hover:#3333ff; --on-accent:#ffffff;
+  --accent:#0070F3; --accent-hover:#3390FF; --on-accent:#ffffff;
   --hd:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
   --bd:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
   --dp:'Space Grotesk',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
@@ -68,7 +68,7 @@ input{font-family:inherit;}
 .monthnav .arrows button:disabled{opacity:.3; cursor:not-allowed;}
 
 /* hero */
-.hero{position:relative; border-radius:var(--r-xl); padding:22px 22px 18px; background:var(--surface); border:1px solid var(--line); overflow:hidden;}
+.hero{position:relative; border-radius:var(--r-xl); padding:22px 22px 18px; background:var(--surface); overflow:hidden;}
 .hero.neg .hero-amt{color:var(--mu);}
 .hero-top{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
 .hero-amt{font-family:var(--dp); font-weight:700; font-size:40px; letter-spacing:-.03em; line-height:1.02; margin-top:8px;}
@@ -82,10 +82,10 @@ button.hero-orb{transition:background .2s, box-shadow .2s;}
 button.hero-orb:hover{background:var(--accent-hover);}
 button.hero-orb:active{transform:scale(.9);}
 .hero-row{display:flex; gap:8px; margin-top:16px;}
-.hero-chip{flex:1; min-width:0; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-md); padding:10px 10px; text-align:left; color:inherit; transition:background .15s, border-color .15s;}
+.hero-chip{flex:1; min-width:0; background:var(--surface-2); border-radius:var(--r-md); padding:10px 10px; text-align:left; color:inherit; transition:background .15s;}
 .hero-chip .k{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--mu); font-weight:600; white-space:nowrap;}
 .hero-chip .v{font-family:var(--hd); font-weight:700; font-size:15.5px; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.hero-chip:hover{background:var(--surface-3); border-color:var(--line-2);}
+.hero-chip:hover{background:var(--surface-3);}
 .hero-chip:active{transform:scale(.97);}
 .shortcutrow{display:flex; gap:16px; overflow-x:auto; padding:2px 2px 4px; scrollbar-width:none;}
 .shortcutrow::-webkit-scrollbar{display:none;}
@@ -101,8 +101,8 @@ button.hero-orb:active{transform:scale(.9);}
 .bento.cols-2{grid-template-columns:1fr 1fr;}
 .bento.cols-3{grid-template-columns:1fr 1fr 1fr;}
 .bento.cols-3 .bt-v{font-size:17px;}
-.bento-tile{position:relative; border-radius:var(--r-lg); padding:15px; background:var(--surface); border:1px solid var(--line); text-align:left; transition:.15s; overflow:hidden; width:100%;}
-.bento-tile:hover{border-color:var(--line-2); background:var(--surface-2);}
+.bento-tile{position:relative; border-radius:var(--r-lg); padding:15px; background:var(--surface); text-align:left; transition:.15s; overflow:hidden; width:100%;}
+.bento-tile:hover{background:var(--surface-2);}
 .bento-tile:active{transform:scale(.985);}
 .bento-tile.neg .bt-v{color:var(--mu);}
 .bento-tile.neg .bt-d{color:var(--ink-2); font-weight:600;}
@@ -130,7 +130,7 @@ button.hero-orb:active{transform:scale(.9);}
 .gauge-tick{position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:var(--ink-2); border-radius:1px;}
 
 /* cards / sections */
-.card{border-radius:var(--r-lg); padding:16px; background:var(--surface); border:1px solid var(--line);}
+.card{border-radius:var(--r-lg); padding:16px; background:var(--surface);}
 .section-h{display:flex; align-items:center; justify-content:space-between; padding:6px 4px 0;}
 .section-h h2{font-family:var(--hd); font-weight:700; font-size:17px;}
 .section-h .more{display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--mu); font-weight:600; transition:.15s;}
