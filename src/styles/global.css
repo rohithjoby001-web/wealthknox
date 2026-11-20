@@ -5,9 +5,14 @@
    rules at the bottom for the splash screen and the install-app prompt.)
 =================================================================== */
 :root{
-  --bg:#000000; --surface:#0d0d0d; --surface-2:#131313; --surface-3:#1e1e1e; --surface-4:#333333;
+  /* Surface ladder lifted +8/255 across the board so the borderless
+     containers (.hero, .hero-chip, .bento-tile, .card) read clearly
+     against the pure-black page background. All inter-level gaps are
+     preserved exactly, so hover steps and icon-chip-on-tile contrast
+     behave identically to before. */
+  --bg:#000000; --surface:#151515; --surface-2:#1b1b1b; --surface-3:#262626; --surface-4:#3b3b3b;
   --line:#2b2b2b; --line-2:#3a3a3a; --line-3:#555555;
-  --glass:rgba(30,30,30,.92); --glass-strong:rgba(13,13,13,.96); --blur:14px;
+  --glass:rgba(38,38,38,.92); --glass-strong:rgba(21,21,21,.96); --blur:14px;
   --ink:#ffffff; --ink-2:#d4d4d4; --mu:#8c8c8c; --mu-2:#5a5a5a; --on-ink:#000000;
   /* The one accent — used only for the hero icon, the healthy-spend
      gauge fill, and the active nav tab. Everything else in the system
