@@ -19,14 +19,19 @@ export default function SettingsSheet() {
     setSbInput(n ? String(n) : '');
     if (n !== (state.settings.startingBalance || 0)) setStartingBalance(n);
   };
+  // Drives the save button's look — filled once you've typed something
+  // that hasn't been committed yet, so it's clear there's a pending change
+  // and clear once it's saved, rather than leaving people to guess whether
+  // tapping away or pressing Enter actually did anything.
+  const sbDirty = Math.max(0, parseFloat(sbInput) || 0) !== (state.settings.startingBalance || 0);
 
   const askReset = () => {
     openSheet({
       kind: 'confirm',
       title: 'Reset everything?',
       text: cloudActive
-        ? "This clears every expense, income entry, source and goal from your account, on every device. This can't be undone."
-        : "This clears every expense, income entry, source and goal. This can't be undone.",
+        ? "This clears every expense, income entry, source, goal and your starting balance from your account, on every device. This can't be undone."
+        : "This clears every expense, income entry, source, goal and your starting balance. This can't be undone.",
       confirmLabel: 'Reset',
       onConfirm: resetAll,
     });
@@ -105,9 +110,22 @@ export default function SettingsSheet() {
             onBlur={commitStartingBalance}
             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           />
+          <button
+            type="button"
+            aria-label="Save starting balance"
+            onClick={commitStartingBalance}
+            style={{
+              width: 36, height: 36, minWidth: 36, borderRadius: '50%', border: 'none',
+              display: 'grid', placeItems: 'center', transition: '.15s',
+              background: sbDirty ? 'var(--ink)' : 'var(--surface-3)',
+              color: sbDirty ? 'var(--on-ink)' : 'var(--mu)',
+            }}
+          >
+            <Icon name="check" size={16} stroke={2.4} />
+          </button>
         </div>
         <p className="helptext">
-          What you're starting with (e.g. your current bank balance) — counted toward "Available", but kept out of your monthly and yearly income totals so Reports only shows what you actually earned.
+          What you're starting with (e.g. your current bank balance) — counted toward "Available", but kept out of your monthly and yearly income totals so Reports only shows what you actually earned. Type it, then tap the check to save.
         </p>
       </div>
       <div className="divider" />
@@ -138,8 +156,8 @@ export default function SettingsSheet() {
         <label>Data</label>
         <p className="mu" style={{ fontSize: 13.5, marginBottom: 12, lineHeight: 1.5 }}>
           {cloudActive
-            ? 'Clear every expense, income entry, source and target from your account, on every device.'
-            : 'Clear every expense, income entry, source and target on this device.'}
+            ? 'Clear every expense, income entry, source, target and starting balance from your account, on every device.'
+            : 'Clear every expense, income entry, source, target and starting balance on this device.'}
         </p>
         <button className="btn danger" onClick={askReset}>Reset all data</button>
       </div>

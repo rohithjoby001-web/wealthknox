@@ -84,6 +84,10 @@ export async function resetAllCloud(uid) {
     const snap = await getDocs(entityCollectionRef(uid, entity));
     await commitInChunks((op) => snap.docs.forEach((d) => op((b) => b.delete(d.ref))));
   }
+  // Starting balance is a money figure tied to this data, not a display
+  // preference like currency — a "reset everything" that left an old
+  // balance behind would show money that no longer traces back to anything.
+  await setDoc(userDocRef(uid), { startingBalance: 0 }, { merge: true });
 }
 
 // Backs the Import-backup flow in Settings: wipe every entity collection

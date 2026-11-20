@@ -150,7 +150,10 @@ function reducer(state, action) {
       return { ...state, sources: state.sources.filter((s) => s.id !== action.id) };
 
     case 'RESET_ALL':
-      return { ...state, sources: [], incomes: [], expenses: [], goals: [] };
+      // Starting balance is money tied to this data, not a display preference
+      // like currency — a "reset everything" that left it behind would show
+      // an Available figure with nothing behind it.
+      return { ...state, sources: [], incomes: [], expenses: [], goals: [], settings: { ...state.settings, startingBalance: 0 } };
 
     default:
       return state;
