@@ -130,7 +130,7 @@ export default function Reports() {
           {!isMonth ? (
             <>
               <div className="section-h"><h2>Month by month</h2></div>
-              <div className="card"><LineChart data={ySeries} currentKey={monthKey(new Date())} /></div>
+              <div className="card"><LineChart data={ySeries} currentKey={monthKey(new Date())} currency={cur()} /></div>
             </>
           ) : null}
 

@@ -14,7 +14,7 @@ function smoothPath(pts) {
 }
 
 // Income-vs-expense trend line — ported 1:1 from the original SVG builder.
-export default function LineChart({ data, currentKey }) {
+export default function LineChart({ data, currentKey, currency = '$' }) {
   const W = 300, H = 132, PAD = { top: 26, right: 6, bottom: 6, left: 6 };
   const n = data.length;
   if (n === 0) return null;
@@ -56,8 +56,8 @@ export default function LineChart({ data, currentKey }) {
         {ptsIn.map((p, i) => (
           <circle key={i} className={`pt${i === activeIdx ? ' pt-cur' : ''}`} cx={p.x} cy={p.y} r={i === activeIdx ? 3.8 : 2.6} />
         ))}
-        <text className="tip" x={active.x + dx} y={active.y - 10} textAnchor={anchor}>${formatCompact(active.d.income)}</text>
-        <text className="tip tip-out" x={activeOut.x + dx} y={activeOut.y + outDy} textAnchor={anchor}>${formatCompact(activeOut.d.expense)}</text>
+        <text className="tip" x={active.x + dx} y={active.y - 10} textAnchor={anchor}>{currency}{formatCompact(active.d.income)}</text>
+        <text className="tip tip-out" x={activeOut.x + dx} y={activeOut.y + outDy} textAnchor={anchor}>{currency}{formatCompact(activeOut.d.expense)}</text>
       </svg>
       <div className="linechart-x">
         {data.map((d) => (

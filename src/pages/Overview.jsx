@@ -7,27 +7,32 @@ import TxRow from '../components/TxRow.jsx';
 import ExpandToggle from '../components/ExpandToggle.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import GoalCard from '../components/GoalCard.jsx';
-import { WeekBarChart } from '../components/charts/BarChart.jsx';
-import LineChart from '../components/charts/LineChart.jsx';
 import { Icon } from '../icons/index.jsx';
-import { monthKey, monthLabel, parseISO, MONTHS_SHORT } from '../utils/date.js';
+import { monthKey, monthLabel } from '../utils/date.js';
 import { formatMoney, clampPct } from '../utils/format.js';
 import {
   monthIncome, monthExpense, monthNet, savingsRate, spendRatio, spendTier,
-  monthlySeries, dailySeries, rangeSeries, recentTransactions, availableBalance, totalAllocatedAll,
+  recentTransactions, availableBalance, totalAllocatedAll,
 } from '../utils/calc.js';
-
-const RANGES = [[3, '3M'], [6, '6M'], [12, '1Y']];
 
 const RECENT_LIMIT = 4;
 
-const shortDate = (iso) => { const d = parseISO(iso); return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`; };
+// The other icons are fixed hand-drawn shapes, but a currency symbol isn't —
+// $/₹/€/£ all look different, so this one draws the actual chosen symbol
+// as text inside the same circle the old dollar-only "coin" icon used.
+function CurrencyBadge({ symbol, size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <text x="12" y="12.5" textAnchor="middle" dominantBaseline="central" fontSize="11" fontWeight="700" fill="currentColor" stroke="none">{symbol}</text>
+    </svg>
+  );
+}
 
 export default function Overview() {
-  const { state, setTab, setChartRange, openSheet, cur } = useApp();
-  const { incomes, expenses, goals, sources, chartRange } = state;
+  const { state, setTab, openSheet, cur } = useApp();
+  const { incomes, expenses, goals, sources } = state;
   const [recentExpanded, setRecentExpanded] = useState(false);
-  const [customRange, setCustomRange] = useState(null); // { from: iso, to: iso } | null — a one-off view, not synced or persisted
   const today = new Date();
   const key = monthKey(today);
 
@@ -37,28 +42,6 @@ export default function Overview() {
   const rate = savingsRate(incomes, expenses, key);
   const ratio = spendRatio(incomes, expenses, key);
   const tier = spendTier(ratio);
-  const series = customRange
-    ? (() => {
-        const raw = rangeSeries(incomes, expenses, parseISO(customRange.from), parseISO(customRange.to));
-        // Daily points (have .iso) are already short ("5 Nov"); monthly
-        // points ("Nov 2026") drop the year once there are enough of them
-        // that repeating it under every point would just be clutter —
-        // same rule the preset 3M/6M/1Y ranges already use below.
-        const isDaily = raw.length > 0 && 'iso' in raw[0];
-        return !isDaily && raw.length > 6 ? raw.map((m) => ({ ...m, label: m.label.split(' ')[0] })) : raw;
-      })()
-    : monthlySeries(incomes, expenses, chartRange).map((m) => ({
-        ...m,
-        label: chartRange > 6 ? m.label.split(' ')[0] : m.label,
-      }));
-
-  const pickCustomRange = () => openSheet({
-    kind: 'date-range',
-    initialFrom: customRange?.from,
-    initialTo: customRange?.to,
-    onApply: (from, to) => setCustomRange({ from, to }),
-  });
-  const week = dailySeries(incomes, expenses, 7);
   const recentPool = recentTransactions(incomes, expenses, sources, 20);
   const recent = recentExpanded ? recentPool : recentPool.slice(0, RECENT_LIMIT);
   const avail = availableBalance(incomes, expenses, goals, state.settings.startingBalance);
@@ -83,7 +66,7 @@ export default function Overview() {
               <p className="hero-sub">Saving {rate}% of what came in this month.</p>
             )}
           </div>
-          <div className="hero-orb"><Icon name="coin" size={22} stroke={2.2} /></div>
+          <div className="hero-orb"><CurrencyBadge symbol={cur()} size={22} /></div>
         </div>
         <span className="lbl-sm hero-period">This month</span>
         <div className="hero-row">
@@ -114,22 +97,6 @@ export default function Overview() {
       </div>
 
       {inc > 0 ? <HealthCard tier={tier} ratio={ratio} rate={rate} /> : null}
-
-      <div className="section-h"><h2>Income vs expenses</h2></div>
-      <div className="card">
-        <div className="seg" role="tablist">
-          {RANGES.map(([n, l]) => (
-            <button key={n} className={!customRange && chartRange === n ? 'on' : ''} onClick={() => { setCustomRange(null); setChartRange(n); }}>{l}</button>
-          ))}
-          <button className={customRange ? 'on' : ''} onClick={pickCustomRange}>
-            {customRange ? `${shortDate(customRange.from)}–${shortDate(customRange.to)}` : 'Custom'}
-          </button>
-        </div>
-        <LineChart data={series} currentKey={key} />
-      </div>
-
-      <div className="section-h"><h2>Last 7 days</h2></div>
-      <div className="card"><WeekBarChart data={week} /></div>
 
       {goals.length > 0 ? (
         <>
