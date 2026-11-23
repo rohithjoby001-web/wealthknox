@@ -5,12 +5,16 @@
 // one person's documents invisible to everyone else.
 import {
   collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc,
-  getDoc, getDocs, writeBatch, increment, arrayUnion,
+  getDoc, getDocs, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
 import { buildSampleData } from '../data/sampleData.js';
 
-const ENTITY_COLLECTIONS = ['sources', 'incomes', 'expenses', 'goals'];
+// 'goals' was renamed to 'reminders' — recurring monthly bill reminders
+// replace the old savings-target concept. Same dual-mode symmetry rule
+// applies: any new entity collection added here must also be handled in
+// AppContext.jsx's reducer + persistablePayload + normalizeSaved.
+const ENTITY_COLLECTIONS = ['sources', 'incomes', 'expenses', 'reminders'];
 const BATCH_LIMIT = 450; // Firestore caps a batch at 500 writes — stay well clear of it.
 
 const userDocRef = (uid) => doc(db, 'users', uid);
@@ -70,14 +74,10 @@ export const patchDoc = (uid, entity, id, patch) => updateDoc(entityDocRef(uid, 
 export const removeDoc = (uid, entity, id) => deleteDoc(entityDocRef(uid, entity, id));
 export const putSettings = (uid, patch) => setDoc(userDocRef(uid), patch, { merge: true });
 
-// Goal allocate/withdraw both move the same lever in opposite directions:
-// an atomic increment on `allocated` (positive to add, negative to take
-// back out) plus one more line in the history array. increment() is
-// Firestore's own atomic counter op, so two devices adjusting the same
-// goal at once still land on the correct total instead of one clobbering
-// the other.
-export const adjustGoalAllocated = (uid, goalId, delta, historyEntry) =>
-  updateDoc(entityDocRef(uid, 'goals', goalId), { allocated: increment(delta), history: arrayUnion(historyEntry) });
+// Reminders don't have an allocate/withdraw concept like goals did —
+// toggling a reminder's paid status for a month is a plain patchDoc on
+// the reminders doc (handled directly in AppContext via patchDoc), so
+// there's no atomic counter helper needed here anymore.
 
 export async function resetAllCloud(uid) {
   for (const entity of ENTITY_COLLECTIONS) {

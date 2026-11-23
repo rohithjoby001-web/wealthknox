@@ -9,7 +9,7 @@ const initial = (email) => (email || '?').trim().charAt(0).toUpperCase() || '?';
 export default function Header({ title, subtitle }) {
   const { state, openSheet } = useApp();
   const { enabled: authEnabled, user } = useAuth();
-  const alerts = getAlerts(state.incomes, state.expenses, state.goals, monthKey(new Date()), state.settings.startingBalance);
+  const alerts = getAlerts(state.incomes, state.expenses, state.reminders, monthKey(new Date()), state.settings.startingBalance);
 
   return (
     <div className="head-row">

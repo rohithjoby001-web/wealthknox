@@ -16,4 +16,7 @@ export const CATEGORIES = [
 export const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
 export const SOURCE_ICONS = ['briefcase', 'laptop', 'store', 'gift', 'trendingUp', 'wallet'];
-export const GOAL_ICONS = ['target', 'plane', 'laptop', 'home', 'car', 'gift', 'heart', 'book', 'shield'];
+// Renamed from GOAL_ICONS — the same icon set works for monthly bill
+// reminders (rent, utilities, subscriptions, etc.). Kept the same list
+// so existing reminder records with these icon values still resolve.
+export const REMINDER_ICONS = ['home', 'bolt', 'repeat', 'film', 'cart', 'heart', 'book', 'shield', 'wallet', 'car', 'gift', 'plane'];

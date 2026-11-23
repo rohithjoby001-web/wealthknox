@@ -1,16 +1,21 @@
 import { catById } from '../data/categories.js';
-import { lastMonths, lastDays, monthKeyOfISO, daysUntil, daysBetween, monthsBetween } from './date.js';
+import { toISO, lastMonths, lastDays, monthKeyOfISO, daysUntil, daysBetween, monthsBetween } from './date.js';
 
 export const inMonth = (list, key) => list.filter((x) => monthKeyOfISO(x.date) === key);
 export const sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x.amount), 0);
-export const totalAllocatedAll = (goals) => sum(goals, (g) => g.allocated || 0);
 export const netBalance = (inc, exp) => sum(inc) - sum(exp);
 // startingBalance is a separate, one-time "what I'm starting with" figure
 // (set in Settings) — not an Income entry — so it counts toward the
 // spendable total here without ever showing up as "income earned" in any
 // month/year breakdown (those only ever look at inc/exp, never this).
-export const availableBalance = (inc, exp, goals, startingBalance = 0) =>
-  startingBalance + netBalance(inc, exp) - totalAllocatedAll(goals);
+//
+// Reminders (replacing the old goals concept) are NOT earmarked money —
+// they're a checklist of recurring bills. Marking a reminder as paid
+// doesn't deduct from available balance; the actual cash movement is
+// recorded separately as an expense when the bill is paid. So the formula
+// here is now just starting balance + net of all income/expense entries.
+export const availableBalance = (inc, exp, _reminders = null, startingBalance = 0) =>
+  startingBalance + netBalance(inc, exp);
 export const monthIncome = (inc, key) => sum(inMonth(inc, key));
 export const monthExpense = (exp, key) => sum(inMonth(exp, key));
 export const monthNet = (inc, exp, key) => monthIncome(inc, key) - monthExpense(exp, key);
@@ -94,10 +99,21 @@ export const rangeSeries = (inc, exp, fromDate, toDate) => {
   }
   return monthsBetween(fromDate, toDate).map((m) => ({ ...m, income: monthIncome(inc, m.key), expense: monthExpense(exp, m.key) }));
 };
+
+// ---------- expense display title ----------
+// "Other" is a fallback category — when the user picks it in AddExpenseSheet,
+// they're prompted to give the expense its own name (customName). Everywhere
+// that shows an expense's title should call this helper so a customName on
+// an Other-category expense wins over the generic "Other" label.
+export const expenseTitle = (x) =>
+  x && x.categoryId === 'other' && x.customName
+    ? x.customName
+    : (x ? catById(x.categoryId).name : '');
+
 export const recentTransactions = (inc, exp, sources, n = 6) => {
   const all = [
     ...inc.map((x) => ({ ...x, kind: 'income', title: sources.find((s) => s.id === x.sourceId)?.name || 'Income' })),
-    ...exp.map((x) => ({ ...x, kind: 'expense', title: catById(x.categoryId).name })),
+    ...exp.map((x) => ({ ...x, kind: 'expense', title: expenseTitle(x) })),
   ];
   all.sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt));
   return all.slice(0, n);
@@ -105,25 +121,59 @@ export const recentTransactions = (inc, exp, sources, n = 6) => {
 export const findTx = (incomes, expenses, id) =>
   [...incomes.map((x) => ({ ...x, kind: 'income' })), ...expenses.map((x) => ({ ...x, kind: 'expense' }))].find((x) => x.id === id);
 
+// ---------- reminder helpers (replacing goal helpers) ----------
+// Whether a reminder is marked paid for a given 'YYYY-MM' monthKey.
+export const reminderPaidFor = (r, key) => Array.isArray(r?.paidMonths) && r.paidMonths.includes(key);
+// Stats for a set of reminders in a given monthKey — total monthly amount,
+// how much has been marked paid, how many reminders are paid vs pending.
+export const reminderMonthStats = (reminders, key) => {
+  const list = Array.isArray(reminders) ? reminders : [];
+  const total = sum(list, (r) => r.amount || 0);
+  const paidList = list.filter((r) => reminderPaidFor(r, key));
+  const paid = sum(paidList, (r) => r.amount || 0);
+  return {
+    total,
+    paid,
+    pending: Math.max(0, total - paid),
+    totalCount: list.length,
+    paidCount: paidList.length,
+    pendingCount: list.length - paidList.length,
+  };
+};
+
+// Days until a reminder's due day this month. Returns null if dueDay is
+// not set. Returns a signed integer: 0 means due today, negative means
+// overdue this month (e.g. -3 = was due 3 days ago, still unpaid).
+export const reminderDueIn = (r, today = new Date()) => {
+  if (!r?.dueDay) return null;
+  const dayNum = Math.min(r.dueDay, 28); // clamp to a safe day-of-month
+  return dayNum - today.getDate();
+};
+
 // Real, actionable flags for the bell icon in the header — replacing what
 // used to be a button that always said "No new notifications" no matter
 // what was going on with the person's money.
-export const getAlerts = (inc, exp, goals, key, startingBalance = 0) => {
+export const getAlerts = (inc, exp, reminders, key, _startingBalance = 0) => {
   const out = [];
   const ratio = spendRatio(inc, exp, key);
   if (ratio != null && ratio > 100) {
     out.push({ id: 'overspend', icon: 'alert', tone: 'warn', text: "You've spent more than you've earned this month." });
   }
-  if (availableBalance(inc, exp, goals, startingBalance) < 0) {
-    out.push({ id: 'negative-available', icon: 'wallet', tone: 'warn', text: 'Spending has dipped into money already saved toward targets.' });
+  // Bill overdue alerts: any reminder for the current month that has a
+  // dueDay already past and not yet marked paid.
+  const today = new Date();
+  if (Array.isArray(reminders) && key === monthKeyOfISO(toISO(today))) {
+    const overdue = reminders.filter((r) => {
+      if (reminderPaidFor(r, key)) return false;
+      const d = reminderDueIn(r, today);
+      return d != null && d < 0;
+    });
+    if (overdue.length === 1) {
+      out.push({ id: `reminder-overdue-${overdue[0].id}`, icon: 'flag', tone: 'warn', text: `"${overdue[0].name}" was due ${-reminderDueIn(overdue[0], today)} day${reminderDueIn(overdue[0], today) === -1 ? '' : 's'} ago and isn't marked paid.` });
+    } else if (overdue.length > 1) {
+      out.push({ id: 'reminder-overdue-many', icon: 'flag', tone: 'warn', text: `${overdue.length} bills are past their due day this month and not marked paid.` });
+    }
   }
-  goals.forEach((g) => {
-    if (g.allocated >= g.target || !g.deadline) return;
-    const d = daysUntil(g.deadline);
-    if (d == null) return;
-    if (d < 0) out.push({ id: `deadline-${g.id}`, icon: 'flag', tone: 'warn', text: `"${g.name}" target date has passed.` });
-    else if (d <= 7) out.push({ id: `deadline-${g.id}`, icon: 'flag', tone: 'info', text: `${d === 0 ? 'Today' : `${d} day${d === 1 ? '' : 's'} left`} to reach "${g.name}".` });
-  });
   return out;
 };
 

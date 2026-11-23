@@ -30,8 +30,8 @@ export default function SettingsSheet() {
       kind: 'confirm',
       title: 'Reset everything?',
       text: cloudActive
-        ? "This clears every expense, income entry, source, goal and your starting balance from your account, on every device. This can't be undone."
-        : "This clears every expense, income entry, source, goal and your starting balance. This can't be undone.",
+        ? "This clears every expense, income entry, source, reminder and your starting balance from your account, on every device. This can't be undone."
+        : "This clears every expense, income entry, source, reminder and your starting balance. This can't be undone.",
       confirmLabel: 'Reset',
       onConfirm: resetAll,
     });
@@ -64,14 +64,14 @@ export default function SettingsSheet() {
       let parsed;
       try { parsed = JSON.parse(text); } catch { parsed = null; }
       const looksValid = parsed && typeof parsed === 'object' &&
-        ['incomes', 'expenses', 'goals', 'sources'].every((k) => Array.isArray(parsed[k]));
+        ['incomes', 'expenses', 'reminders', 'sources'].every((k) => Array.isArray(parsed[k]));
       if (!looksValid) { showToast("That doesn't look like a WealthKnox backup file"); return; }
       openSheet({
         kind: 'confirm',
         title: 'Restore this backup?',
         text: cloudActive
-          ? "This replaces every expense, income entry, source and target in your account, on every device, with what's in the file. This can't be undone."
-          : "This replaces every expense, income entry, source and target on this device with what's in the file. This can't be undone.",
+          ? "This replaces every expense, income entry, source and reminder in your account, on every device, with what's in the file. This can't be undone."
+          : "This replaces every expense, income entry, source and reminder on this device with what's in the file. This can't be undone.",
         confirmLabel: 'Restore',
         onConfirm: () => importData(text),
       });
@@ -156,8 +156,8 @@ export default function SettingsSheet() {
         <label>Data</label>
         <p className="mu" style={{ fontSize: 13.5, marginBottom: 12, lineHeight: 1.5 }}>
           {cloudActive
-            ? 'Clear every expense, income entry, source, target and starting balance from your account, on every device.'
-            : 'Clear every expense, income entry, source, target and starting balance on this device.'}
+            ? 'Clear every expense, income entry, source, reminder and starting balance from your account, on every device.'
+            : 'Clear every expense, income entry, source, reminder and starting balance on this device.'}
         </p>
         <button className="btn danger" onClick={askReset}>Reset all data</button>
       </div>

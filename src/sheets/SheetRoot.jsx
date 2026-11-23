@@ -2,10 +2,9 @@ import { useEffect } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import AddExpenseSheet from './AddExpenseSheet.jsx';
 import AddIncomeSheet from './AddIncomeSheet.jsx';
-import AddGoalSheet from './AddGoalSheet.jsx';
+import AddReminderSheet from './AddReminderSheet.jsx';
 import AddSourceSheet from './AddSourceSheet.jsx';
-import AllocateSheet from './AllocateSheet.jsx';
-import GoalDetailSheet from './GoalDetailSheet.jsx';
+import ReminderDetailSheet from './ReminderDetailSheet.jsx';
 import TxDetailSheet from './TxDetailSheet.jsx';
 import SettingsSheet from './SettingsSheet.jsx';
 import ConfirmSheet from './ConfirmSheet.jsx';
@@ -42,14 +41,12 @@ function SheetBody({ sheet }) {
       return <AddExpenseSheet editing={sheet.editing} />;
     case 'add-income':
       return <AddIncomeSheet editing={sheet.editing} />;
-    case 'add-goal':
-      return <AddGoalSheet editing={sheet.editing} />;
+    case 'add-reminder':
+      return <AddReminderSheet editing={sheet.editing} />;
     case 'add-source':
       return <AddSourceSheet editing={sheet.editing} />;
-    case 'allocate':
-      return <AllocateSheet goalId={sheet.goalId} mode={sheet.mode} />;
-    case 'goal-detail':
-      return <GoalDetailSheet goalId={sheet.goalId} />;
+    case 'reminder-detail':
+      return <ReminderDetailSheet reminderId={sheet.reminderId} />;
     case 'tx-detail':
       return <TxDetailSheet txId={sheet.txId} />;
     case 'confirm':

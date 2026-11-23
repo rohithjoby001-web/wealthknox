@@ -6,13 +6,13 @@ import HealthCard from '../components/HealthCard.jsx';
 import TxRow from '../components/TxRow.jsx';
 import ExpandToggle from '../components/ExpandToggle.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import GoalCard from '../components/GoalCard.jsx';
+import ReminderCard from '../components/ReminderCard.jsx';
 import { Icon } from '../icons/index.jsx';
 import { monthKey, monthLabel } from '../utils/date.js';
 import { formatMoney, clampPct } from '../utils/format.js';
 import {
   monthIncome, monthExpense, monthNet, savingsRate, spendRatio, spendTier,
-  recentTransactions, availableBalance, totalAllocatedAll,
+  recentTransactions, availableBalance, reminderMonthStats,
 } from '../utils/calc.js';
 
 const RECENT_LIMIT = 4;
@@ -31,7 +31,7 @@ function CurrencyBadge({ symbol, size = 22 }) {
 
 export default function Overview() {
   const { state, setTab, openSheet, cur } = useApp();
-  const { incomes, expenses, goals, sources } = state;
+  const { incomes, expenses, reminders, sources } = state;
   const [recentExpanded, setRecentExpanded] = useState(false);
   const today = new Date();
   const key = monthKey(today);
@@ -44,10 +44,19 @@ export default function Overview() {
   const tier = spendTier(ratio);
   const recentPool = recentTransactions(incomes, expenses, sources, 20);
   const recent = recentExpanded ? recentPool : recentPool.slice(0, RECENT_LIMIT);
-  const avail = availableBalance(incomes, expenses, goals, state.settings.startingBalance);
-  const allocated = totalAllocatedAll(goals);
-  const activeGoals = goals.filter((g) => g.allocated < g.target).slice(0, 2);
-  const goalsToShow = activeGoals.length ? activeGoals : goals.slice(0, 2);
+  const avail = availableBalance(incomes, expenses, reminders, state.settings.startingBalance);
+  const rstats = reminderMonthStats(reminders, key);
+  // Show up to 2 reminders on Overview — unpaid first (most actionable),
+  // then by due day. Falls back to any 2 if everything's already paid.
+  const unpaid = reminders.filter((r) => !((r.paidMonths || []).includes(key)));
+  const remindersToShow = (unpaid.length ? unpaid : reminders)
+    .slice()
+    .sort((a, b) => {
+      const ad = a.dueDay || 99, bd = b.dueDay || 99;
+      if (ad !== bd) return ad - bd;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 2);
 
   return (
     <>
@@ -78,9 +87,9 @@ export default function Overview() {
             <div className="k"><Icon name="arrowDown" size={13} stroke={2.3} />Expenses</div>
             <div className="v num">{formatMoney(exp, cur())}</div>
           </button>
-          <button className="hero-chip" onClick={() => setTab('goals')}>
-            <div className="k"><Icon name="target" size={13} stroke={2.3} />Saved</div>
-            <div className="v num">{inc > 0 ? `${rate}%` : '--'}</div>
+          <button className="hero-chip" onClick={() => setTab('reminders')}>
+            <div className="k"><Icon name="bell" size={13} stroke={2.3} />Bills</div>
+            <div className="v num">{reminders.length === 0 ? '--' : `${rstats.paidCount}/${rstats.totalCount}`}</div>
           </button>
         </div>
       </div>
@@ -90,23 +99,30 @@ export default function Overview() {
           icon="wallet"
           label="Available"
           amount={avail}
-          detail={avail < 0 ? "Spending has dipped into money already saved toward targets" : null}
+          detail={avail < 0 ? "Spending has passed what you've earned" : null}
           currency={cur()}
-          onClick={() => setTab('goals')}
+          onClick={() => setTab('income')}
         />
       </div>
 
       {inc > 0 ? <HealthCard tier={tier} ratio={ratio} rate={rate} /> : null}
 
-      {goals.length > 0 ? (
+      {reminders.length > 0 ? (
         <>
-          <div className="section-h"><h2>Targets</h2><button className="more" onClick={() => setTab('goals')}>View all</button></div>
+          <div className="section-h"><h2>Reminders</h2><button className="more" onClick={() => setTab('reminders')}>View all</button></div>
           <div className="bento">
-            <StatTile icon="target" label="In goals" amount={allocated} detail={`${goals.length} target${goals.length === 1 ? '' : 's'}`} currency={cur()} onClick={() => setTab('goals')} />
+            <StatTile icon="bell" label="Bills this month" amount={rstats.total} detail={`${rstats.paidCount} of ${rstats.totalCount} paid`} currency={cur()} onClick={() => setTab('reminders')} />
           </div>
           <div className="stack-sm">
-            {goalsToShow.map((g) => (
-              <GoalCard key={g.id} goal={g} currency={cur()} onClick={() => openSheet({ kind: 'goal-detail', goalId: g.id })} />
+            {remindersToShow.map((r) => (
+              <ReminderCard
+                key={r.id}
+                reminder={r}
+                currency={cur()}
+                monthKeyStr={key}
+                today={today}
+                onClick={() => openSheet({ kind: 'reminder-detail', reminderId: r.id })}
+              />
             ))}
           </div>
         </>

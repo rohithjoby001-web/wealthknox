@@ -6,7 +6,7 @@ const TABS = [
   { key: 'reports', label: 'Reports', icon: 'trendingUp' },
   { key: 'expenses', label: 'Expenses', icon: 'expense' },
   { key: 'income', label: 'Income', icon: 'income' },
-  { key: 'goals', label: 'Goals', icon: 'target' },
+  { key: 'reminders', label: 'Reminders', icon: 'bell' },
 ];
 
 // Icon-only, fixed-size tabs — no label to expand/collapse, so
@@ -22,10 +22,10 @@ function Tab({ t, cur, onNav }) {
 
 // The Add action used to live here as a central FAB whose meaning
 // silently changed depending on which tab you were on (expense/income/
-// target) — even redesigned to float clear of the tabs, that's still a
+// reminder) — even redesigned to float clear of the tabs, that's still a
 // control that means something different every time you look at it.
 // It now lives on each relevant page itself (the "+" on the Expenses/
-// Income/Targets hero card), so this is just plain navigation — five
+// Income/Reminders hero card), so this is just plain navigation — five
 // tabs, nothing contextual.
 export default function BottomNav() {
   const { state, setTab } = useApp();

@@ -9,14 +9,14 @@ import Overview from './pages/Overview.jsx';
 import Reports from './pages/Reports.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Income from './pages/Income.jsx';
-import Goals from './pages/Goals.jsx';
+import Reminders from './pages/Reminders.jsx';
 
 const PAGES = {
   overview: Overview,
   reports: Reports,
   expenses: Expenses,
   income: Income,
-  goals: Goals,
+  reminders: Reminders,
 };
 
 export default function App() {

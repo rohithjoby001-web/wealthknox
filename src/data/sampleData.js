@@ -1,4 +1,4 @@
-import { toISO, addDays, addMonths } from '../utils/date.js';
+import { toISO, addDays, monthKey } from '../utils/date.js';
 
 // Starter / demo data, seeded relative to "today" so it always looks
 // current on a fresh install. Shown only until the person's own data
@@ -7,6 +7,8 @@ export function buildSampleData() {
   const today = new Date();
   const iso = (offset) => toISO(addDays(today, -offset));
   const tISO = (ts) => new Date(ts).toISOString();
+  const thisMonth = monthKey(today);
+  const lastMonth = monthKey(new Date(today.getFullYear(), today.getMonth() - 1, 1));
 
   const sources = [
     { id: 's1', name: 'Main Salary', icon: 'briefcase', createdAt: tISO(Date.now() - 86400000 * 120) },
@@ -46,27 +48,23 @@ export function buildSampleData() {
     { id: 'e15', amount: 1800, categoryId: 'housing', note: 'Rent', date: iso(1), createdAt: tISO(Date.now() - 86400000 * 1) },
     { id: 'e16', amount: 14, categoryId: 'transport', note: 'Bus pass top-up', date: iso(11), createdAt: tISO(Date.now() - 86400000 * 11) },
     { id: 'e17', amount: 64.3, categoryId: 'groceries', note: 'Weekly grocery run', date: iso(12), createdAt: tISO(Date.now() - 86400000 * 12) },
+    // An "Other"-category expense with a custom name, to demonstrate the
+    // new "name it when it's Other" flow in AddExpenseSheet.
+    { id: 'e18', amount: 45, categoryId: 'other', customName: 'Birthday gift', note: 'For Sarah', date: iso(4), createdAt: tISO(Date.now() - 86400000 * 4) },
   ];
 
-  const goals = [
-    {
-      id: 'g1', name: 'New Laptop', target: 2000, allocated: 1200, icon: 'laptop', deadline: toISO(addMonths(today, 2)), createdAt: tISO(Date.now() - 86400000 * 40),
-      history: [
-        { id: 'a1', goalId: 'g1', amount: 300, date: iso(40), createdAt: tISO(Date.now() - 86400000 * 40) },
-        { id: 'a2', goalId: 'g1', amount: 300, date: iso(28), createdAt: tISO(Date.now() - 86400000 * 28) },
-        { id: 'a3', goalId: 'g1', amount: 300, date: iso(16), createdAt: tISO(Date.now() - 86400000 * 16) },
-        { id: 'a4', goalId: 'g1', amount: 300, date: iso(6), createdAt: tISO(Date.now() - 86400000 * 6) },
-      ],
-    },
-    {
-      id: 'g2', name: 'Trip to Japan', target: 4500, allocated: 900, icon: 'plane', deadline: toISO(addMonths(today, 8)), createdAt: tISO(Date.now() - 86400000 * 20),
-      history: [
-        { id: 'a5', goalId: 'g2', amount: 500, date: iso(18), createdAt: tISO(Date.now() - 86400000 * 18) },
-        { id: 'a6', goalId: 'g2', amount: 400, date: iso(8), createdAt: tISO(Date.now() - 86400000 * 8) },
-      ],
-    },
-    { id: 'g3', name: 'Emergency Fund', target: 6000, allocated: 6000, icon: 'shield', deadline: null, createdAt: tISO(Date.now() - 86400000 * 90), history: [] },
+  // Reminders replace the old "goals/targets" concept. Each reminder is a
+  // recurring monthly bill the user wants to track paid/unpaid status for.
+  // `paidMonths` is a list of 'YYYY-MM' keys — when the current monthKey is
+  // in the list, the reminder shows as paid for that month. Switching to a
+  // past month in the month nav shows that month's paid state correctly.
+  const reminders = [
+    { id: 'r1', name: 'Rent',           amount: 1800, dueDay: 1,  icon: 'home',   paidMonths: [thisMonth, lastMonth], createdAt: tISO(Date.now() - 86400000 * 90) },
+    { id: 'r2', name: 'Electricity',    amount: 140,  dueDay: 10, icon: 'bolt',   paidMonths: [thisMonth, lastMonth], createdAt: tISO(Date.now() - 86400000 * 90) },
+    { id: 'r3', name: 'Internet',       amount: 64,   dueDay: 15, icon: 'bolt',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 60) },
+    { id: 'r4', name: 'Phone bill',     amount: 40,   dueDay: 5,  icon: 'repeat', paidMonths: [thisMonth],            createdAt: tISO(Date.now() - 86400000 * 30) },
+    { id: 'r5', name: 'Streaming subs', amount: 19.99,dueDay: 20, icon: 'film',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 45) },
   ];
 
-  return { sources, incomes, expenses, goals };
+  return { sources, incomes, expenses, reminders };
 }

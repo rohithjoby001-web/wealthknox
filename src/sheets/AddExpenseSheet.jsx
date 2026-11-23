@@ -13,22 +13,45 @@ export default function AddExpenseSheet({ editing }) {
   const [categoryId, setCategoryId] = useState(editing?.categoryId || 'food');
   const [note, setNote] = useState(editing?.note || '');
   const [date, setDate] = useState(editing?.date || toISO(new Date()));
+  // `customName` is only relevant when the user picks the "Other" category —
+  // instead of forcing every "Other" expense to share the same generic label,
+  // they can give it its own name (e.g. "Birthday gift", "Parking fine") that
+  // then shows in transaction lists and the recent-activity feed.
+  const [customName, setCustomName] = useState(editing?.customName || '');
 
   // An expense can't be logged past what's actually available — when
   // editing, add the entry's own current amount back in, since it's
   // already subtracted once in this figure.
-  const avail = availableBalance(state.incomes, state.expenses, state.goals, state.settings.startingBalance) + (editing?.amount || 0);
+  const avail = availableBalance(state.incomes, state.expenses, state.reminders, state.settings.startingBalance) + (editing?.amount || 0);
+
+  const isOther = categoryId === 'other';
+
+  const pickCategory = (id) => {
+    setCategoryId(id);
+    // Clearing customName when leaving "Other" keeps the stored expense doc
+    // clean — the reducer's updateExpense path also strips it server-side
+    // via patchDoc, so a stale name doesn't linger on a non-Other expense.
+    if (id !== 'other') setCustomName('');
+  };
 
   const save = () => {
     const amt = parseFloat(amount);
     if (!(amt > 0)) { showToast('Enter an amount'); return; }
+    // When the category is "Other", require a customName — the whole point
+    // of the new flow is that Other expenses get their own label, and an
+    // Other expense with no name is just the old generic behavior we're
+    // trying to replace. Note is separate and still optional.
+    if (isOther && !customName.trim()) {
+      showToast('Name this expense');
+      return;
+    }
     // addExpense/updateExpense re-check this same cap and reject with
     // their own toast if it's somehow exceeded (e.g. available balance
     // shifted from another device while this sheet was open) — only
     // close the sheet once the save actually went through.
     const ok = editing
-      ? updateExpense(editing.id, { amount: amt, categoryId, note: note.trim(), date })
-      : addExpense({ amount: amt, categoryId, note: note.trim(), date });
+      ? updateExpense(editing.id, { amount: amt, categoryId, note: note.trim(), date, customName: customName.trim() })
+      : addExpense({ amount: amt, categoryId, note: note.trim(), date, customName: customName.trim() });
     if (ok) closeSheet();
   };
 
@@ -56,13 +79,20 @@ export default function AddExpenseSheet({ editing }) {
         <label>Category</label>
         <div className="catgrid">
           {CATEGORIES.map((c) => (
-            <button key={c.id} type="button" className={`catcell${categoryId === c.id ? ' on' : ''}`} onClick={() => setCategoryId(c.id)}>
+            <button key={c.id} type="button" className={`catcell${categoryId === c.id ? ' on' : ''}`} onClick={() => pickCategory(c.id)}>
               <i><Icon name={c.icon} size={18} stroke={1.9} /></i>
               <span>{c.name}</span>
             </button>
           ))}
         </div>
       </div>
+      {isOther ? (
+        <div className="field">
+          <label>Name this expense</label>
+          <input className="input" placeholder="e.g. Birthday gift, Parking fine" value={customName} onChange={(e) => setCustomName(e.target.value)} />
+          <p className="helptext">Shows as the expense's name in lists and Recent activity, instead of just "Other".</p>
+        </div>
+      ) : null}
       <div className="field">
         <label>Note (optional)</label>
         <input className="input" placeholder="e.g. Lunch with team" value={note} onChange={(e) => setNote(e.target.value)} />

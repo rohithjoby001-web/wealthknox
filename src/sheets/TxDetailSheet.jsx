@@ -2,9 +2,9 @@ import Sheet from './Sheet.jsx';
 import { Icon } from '../icons/index.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { catById } from '../data/categories.js';
+import { expenseTitle, findTx } from '../utils/calc.js';
 import { formatMoney } from '../utils/format.js';
 import { niceDate } from '../utils/date.js';
-import { findTx } from '../utils/calc.js';
 
 export default function TxDetailSheet({ txId }) {
   const { state, closeSheet, openSheet, deleteIncome, deleteExpense } = useApp();
@@ -13,7 +13,9 @@ export default function TxDetailSheet({ txId }) {
   const isInc = tx.kind === 'income';
   const src = isInc ? state.sources.find((s) => s.id === tx.sourceId) : null;
   const ic = isInc ? (src?.icon || 'wallet') : catById(tx.categoryId).icon;
-  const title = isInc ? (src?.name || 'Income') : catById(tx.categoryId).name;
+  // expenseTitle returns the customName when the expense is in the "Other"
+  // category and has one set — otherwise falls back to the category name.
+  const title = isInc ? (src?.name || 'Income') : expenseTitle(tx);
   const cur = state.settings.currency;
 
   const rows = [

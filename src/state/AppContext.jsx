@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { buildSampleData } from '../data/sampleData.js';
-import { toISO, parseISO, addMonths, isCurrentMonth } from '../utils/date.js';
+import { toISO, parseISO, addMonths, isCurrentMonth, monthKey } from '../utils/date.js';
 import { formatMoney } from '../utils/format.js';
 import { availableBalance } from '../utils/calc.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import {
   subscribeToUserData, ensureSeeded, putDoc, patchDoc, removeDoc,
-  putSettings, adjustGoalAllocated, resetAllCloud, replaceAllCloud,
+  putSettings, resetAllCloud, replaceAllCloud,
 } from './cloudSync.js';
 
 const STORAGE_KEY = 'wealthknox:state:v1';
@@ -38,7 +38,7 @@ function persistablePayload(state) {
     sources: state.sources,
     incomes: state.incomes,
     expenses: state.expenses,
-    goals: state.goals,
+    reminders: state.reminders,
   };
 }
 
@@ -56,7 +56,11 @@ function normalizeSaved(saved) {
     sources: Array.isArray(saved.sources) ? saved.sources : [],
     incomes: Array.isArray(saved.incomes) ? saved.incomes : [],
     expenses: Array.isArray(saved.expenses) ? saved.expenses : [],
-    goals: Array.isArray(saved.goals) ? saved.goals : [],
+    // Backward-compat: if an older backup file still has `goals` from the
+    // pre-reminders era, it just gets dropped — there's no clean migration
+    // path from savings-target data to bill-reminder data, and the user can
+    // always re-create reminders by hand. New files use `reminders`.
+    reminders: Array.isArray(saved.reminders) ? saved.reminders : [],
   };
 }
 
@@ -118,29 +122,40 @@ function reducer(state, action) {
       return { ...state, incomes: state.incomes.filter((x) => x.id !== action.id) };
 
     case 'ADD_GOAL':
-      return { ...state, goals: [...state.goals, action.goal] };
     case 'UPDATE_GOAL':
-      return { ...state, goals: state.goals.map((g) => (g.id === action.id ? { ...g, ...action.patch } : g)) };
     case 'DELETE_GOAL':
-      return { ...state, goals: state.goals.filter((g) => g.id !== action.id) };
     case 'ALLOCATE_GOAL':
-      return {
-        ...state,
-        goals: state.goals.map((g) =>
-          g.id === action.goalId
-            ? { ...g, allocated: g.allocated + action.amount, history: [action.entry, ...(g.history || [])] }
-            : g
-        ),
-      };
     case 'WITHDRAW_GOAL':
+      // Legacy goal actions — silently no-op. Any caller still dispatching
+      // these (e.g. an older tab somehow still in memory) gets a safe
+      // identity return rather than a crash. Goal infrastructure was
+      // replaced by reminders.
+      return state;
+
+    case 'ADD_REMINDER':
+      return { ...state, reminders: [...state.reminders, action.reminder] };
+    case 'UPDATE_REMINDER':
+      return { ...state, reminders: state.reminders.map((r) => (r.id === action.id ? { ...r, ...action.patch } : r)) };
+    case 'DELETE_REMINDER':
+      return { ...state, reminders: state.reminders.filter((r) => r.id !== action.id) };
+    case 'TOGGLE_REMINDER_PAID': {
+      // Toggle whether a reminder is marked paid for the given monthKey.
+      // paidMonths is a plain array of 'YYYY-MM' strings — add or remove
+      // the current key. In cloud mode this mirrors via patchDoc so the
+      // change syncs as a normal doc update (no atomic counter needed).
+      const key = action.monthKey;
       return {
         ...state,
-        goals: state.goals.map((g) =>
-          g.id === action.goalId
-            ? { ...g, allocated: Math.max(0, g.allocated - action.amount), history: [action.entry, ...(g.history || [])] }
-            : g
-        ),
+        reminders: state.reminders.map((r) => {
+          if (r.id !== action.id) return r;
+          const has = Array.isArray(r.paidMonths) && r.paidMonths.includes(key);
+          const paidMonths = has
+            ? (r.paidMonths || []).filter((k) => k !== key)
+            : [...(r.paidMonths || []), key];
+          return { ...r, paidMonths };
+        }),
       };
+    }
 
     case 'ADD_SOURCE':
       return { ...state, sources: [...state.sources, action.source] };
@@ -153,7 +168,7 @@ function reducer(state, action) {
       // Starting balance is money tied to this data, not a display preference
       // like currency — a "reset everything" that left it behind would show
       // an Available figure with nothing behind it.
-      return { ...state, sources: [], incomes: [], expenses: [], goals: [], settings: { ...state.settings, startingBalance: 0 } };
+      return { ...state, sources: [], incomes: [], expenses: [], reminders: [], settings: { ...state.settings, startingBalance: 0 } };
 
     default:
       return state;
@@ -270,28 +285,36 @@ export function AppProvider({ children }) {
       // Income is meant to represent real money (your actual balance or
       // deposits), so an expense can never be recorded past what's
       // actually available — unlike a plain ledger that just lets the
-      // total go negative, this treats "available" as a hard ceiling,
-      // the same way allocateToGoal already does for targets. Rejects
-      // outright (toast + no-op) rather than silently clamping the
+      // total go negative, this treats "available" as a hard ceiling.
+      // Rejects outright (toast + no-op) rather than silently clamping the
       // amount down, since silently changing what someone said they
       // spent would misrepresent the real transaction.
-      addExpense: ({ amount, categoryId, note, date }) => {
-        const avail = availableBalance(state.incomes, state.expenses, state.goals, state.settings.startingBalance);
+      //
+      // `customName` is set only when the user picks the "Other" category
+      // and names the expense themselves — see AddExpenseSheet.
+      addExpense: ({ amount, categoryId, note, date, customName }) => {
+        const avail = availableBalance(state.incomes, state.expenses, state.reminders, state.settings.startingBalance);
         if (amount > avail) { showToast(`Only ${formatMoney(avail, state.settings.currency)} available`); return false; }
         const expense = { id: 'e' + Date.now(), amount, categoryId, note, date, createdAt: new Date().toISOString() };
+        if (categoryId === 'other' && customName) expense.customName = customName;
         if (cloudActive) putDoc(uid, 'expenses', expense).catch(cloudFail("Couldn't save — try again"));
         else dispatch({ type: 'ADD_EXPENSE', expense });
         showToast('Expense added');
         return true;
       },
-      updateExpense: (id, { amount, categoryId, note, date }) => {
+      updateExpense: (id, { amount, categoryId, note, date, customName }) => {
         // The entry being edited is already subtracted once in the
         // current available balance, so add its old amount back before
         // checking the new one against the cap.
         const prev = state.expenses.find((x) => x.id === id);
-        const avail = availableBalance(state.incomes, state.expenses, state.goals, state.settings.startingBalance) + (prev?.amount || 0);
+        const avail = availableBalance(state.incomes, state.expenses, state.reminders, state.settings.startingBalance) + (prev?.amount || 0);
         if (amount > avail) { showToast(`Only ${formatMoney(avail, state.settings.currency)} available`); return false; }
+        // Build the patch — include customName only when it's set on an
+        // Other-category expense; otherwise strip it from the stored doc
+        // so a category change away from Other doesn't leave a stale name.
         const patch = { amount, categoryId, note, date };
+        if (categoryId === 'other' && customName) patch.customName = customName;
+        else if (prev?.customName) patch.customName = null;
         if (cloudActive) patchDoc(uid, 'expenses', id, patch).catch(cloudFail("Couldn't save the change"));
         else dispatch({ type: 'UPDATE_EXPENSE', id, patch });
         showToast('Expense updated');
@@ -321,65 +344,51 @@ export function AppProvider({ children }) {
         showToast('Entry deleted');
       },
 
-      addGoal: ({ name, target, icon, deadline }) => {
-        const goal = { id: 'g' + Date.now(), name, target, allocated: 0, icon, deadline, createdAt: new Date().toISOString(), history: [] };
-        if (cloudActive) putDoc(uid, 'goals', goal).catch(cloudFail("Couldn't save — try again"));
-        else dispatch({ type: 'ADD_GOAL', goal });
-        showToast('Target created');
+      // Reminders replace the old goals/targets concept. A reminder is a
+      // recurring monthly bill (rent, electricity, phone, etc.) with an
+      // amount and optional day-of-month it's due. `paidMonths` is a list
+      // of 'YYYY-MM' keys tracking which months it's been marked paid in —
+      // toggling paid for the current month adds/removes that key.
+      addReminder: ({ name, amount, dueDay, icon }) => {
+        const reminder = {
+          id: 'r' + Date.now(),
+          name, amount,
+          dueDay: dueDay || null,
+          icon: icon || 'wallet',
+          paidMonths: [],
+          createdAt: new Date().toISOString(),
+        };
+        if (cloudActive) putDoc(uid, 'reminders', reminder).catch(cloudFail("Couldn't save — try again"));
+        else dispatch({ type: 'ADD_REMINDER', reminder });
+        showToast('Reminder created');
       },
-      updateGoal: (id, { name, target, icon, deadline }) => {
-        const g = state.goals.find((x) => x.id === id);
-        if (!g) return;
-        const nt = Math.max(target, g.allocated);
-        const clamped = target < g.allocated;
-        const patch = { name, target: nt, icon, deadline };
-        if (cloudActive) patchDoc(uid, 'goals', id, patch).catch(cloudFail("Couldn't save the change"));
-        else dispatch({ type: 'UPDATE_GOAL', id, patch });
-        showToast(clamped ? `Target can't go below ${formatMoney(nt, cur())} already saved` : 'Target updated');
+      updateReminder: (id, { name, amount, dueDay, icon }) => {
+        const patch = { name, amount, dueDay: dueDay || null, icon };
+        if (cloudActive) patchDoc(uid, 'reminders', id, patch).catch(cloudFail("Couldn't save the change"));
+        else dispatch({ type: 'UPDATE_REMINDER', id, patch });
+        showToast('Reminder updated');
       },
-      deleteGoal: (id) => {
-        if (cloudActive) removeDoc(uid, 'goals', id).catch(cloudFail("Couldn't delete — try again"));
-        else dispatch({ type: 'DELETE_GOAL', id });
-        showToast('Target deleted');
+      deleteReminder: (id) => {
+        if (cloudActive) removeDoc(uid, 'reminders', id).catch(cloudFail("Couldn't delete — try again"));
+        else dispatch({ type: 'DELETE_REMINDER', id });
+        showToast('Reminder deleted');
       },
-      // Mirrors the original's inline 'save-allocate' handler: clamp the
-      // entered amount to what's actually available and what's left on
-      // the target, bail out with a toast if there's nothing to give,
-      // otherwise commit and report success so the sheet can close.
-      allocateToGoal: (goalId, rawAmount) => {
-        const g = state.goals.find((x) => x.id === goalId);
-        if (!g) return false;
-        const avail = availableBalance(state.incomes, state.expenses, state.goals, state.settings.startingBalance);
-        const remaining = Math.max(0, g.target - g.allocated);
-        const cap = Math.max(0, Math.min(avail, remaining));
-        const n = Math.max(0, Math.min(rawAmount || 0, cap, remaining));
-        if (n <= 0) { showToast('Nothing to allocate'); return false; }
-        const entry = { id: 'a' + Date.now(), goalId, date: toISO(new Date()), amount: n, createdAt: new Date().toISOString() };
-        if (cloudActive) adjustGoalAllocated(uid, goalId, n, entry).catch(cloudFail("Couldn't save — try again"));
-        else dispatch({ type: 'ALLOCATE_GOAL', goalId, amount: n, entry });
-        showToast(`${formatMoney(n, cur())} allocated to ${g.name}`);
-        return true;
-      },
-      allocationCap: (goalId) => {
-        const g = state.goals.find((x) => x.id === goalId);
-        if (!g) return { avail: 0, remaining: 0, cap: 0 };
-        const avail = availableBalance(state.incomes, state.expenses, state.goals, state.settings.startingBalance);
-        const remaining = Math.max(0, g.target - g.allocated);
-        return { avail, remaining, cap: Math.max(0, Math.min(avail, remaining)) };
-      },
-      // Lets a saver pull money back out of a target without deleting the
-      // whole thing — plans change, and until now the only way to free up
-      // allocated money was to delete the target and lose its name/history.
-      withdrawFromGoal: (goalId, rawAmount) => {
-        const g = state.goals.find((x) => x.id === goalId);
-        if (!g) return false;
-        const n = Math.max(0, Math.min(rawAmount || 0, g.allocated));
-        if (n <= 0) { showToast('Nothing to withdraw'); return false; }
-        const entry = { id: 'w' + Date.now(), goalId, date: toISO(new Date()), amount: -n, createdAt: new Date().toISOString() };
-        if (cloudActive) adjustGoalAllocated(uid, goalId, -n, entry).catch(cloudFail("Couldn't save — try again"));
-        else dispatch({ type: 'WITHDRAW_GOAL', goalId, amount: n, entry });
-        showToast(`${formatMoney(n, cur())} moved back to available balance`);
-        return true;
+      // Toggle the paid status for a reminder in the given monthKey (defaults
+      // to the current monthKey derived from state.monthDate). In cloud mode
+      // the patch doc replaces paidMonths wholesale — Firestore's
+      // arrayUnion/arrayRemove would also work but a plain array write is
+      // simpler and fine here since toggles are user-paced, not concurrent.
+      toggleReminderPaid: (id, keyArg) => {
+        const r = state.reminders.find((x) => x.id === id);
+        if (!r) return;
+        const key = keyArg || monthKey(state.monthDate);
+        const has = Array.isArray(r.paidMonths) && r.paidMonths.includes(key);
+        const paidMonths = has
+          ? (r.paidMonths || []).filter((k) => k !== key)
+          : [...(r.paidMonths || []), key];
+        if (cloudActive) patchDoc(uid, 'reminders', id, { paidMonths }).catch(cloudFail("Couldn't save — try again"));
+        else dispatch({ type: 'TOGGLE_REMINDER_PAID', id, monthKey: key });
+        showToast(has ? 'Marked unpaid' : 'Marked paid');
       },
 
       addSource: ({ name, icon }) => {
