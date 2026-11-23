@@ -1,30 +1,54 @@
 import { Icon } from '../icons/index.jsx';
 import { formatMoney } from '../utils/format.js';
-import { reminderPaidFor, reminderDueIn } from '../utils/calc.js';
+import { MONTHS_SHORT } from '../utils/date.js';
+import { reminderPaidFor, reminderDueIn, reminderDueDate } from '../utils/calc.js';
+import { parseISO } from '../utils/date.js';
 
-// ReminderCard replaces GoalCard. Same visual skeleton (bordered card,
-// icon, name, amount) but instead of an allocation progress bar it shows
-// the bill's due-day hint and a paid/unpaid toggle for the current month.
+// ReminderCard shows a bill's name, amount, and due-date status for the
+// current month. The status is conveyed two ways:
+//   1. A subtitle with the actual due date (e.g. "Dec 7") instead of the
+//      old "Day 7" label that was confusing and discarded the month.
+//   2. A status pill on the right side:
+//        - Paid         → white badge with checkmark (existing .badge-done)
+//        - Upcoming     → blue pill using --accent (the one accent color)
+//        - Due today    → white pill (no checkmark)
+//        - Overdue      → no pill, the subtitle text carries the warning
+//        - No due date  → no pill, just shows "No due date"
 //
-// The whole card opens the detail sheet on click, EXCEPT the paid toggle
-// button which stops propagation so tapping it just flips the paid state
-// without also opening the detail sheet.
+// The whole card opens the detail sheet on click.
 export default function ReminderCard({ reminder, currency, monthKeyStr, today, onClick }) {
   const paid = reminderPaidFor(reminder, monthKeyStr);
   const dueIn = reminderDueIn(reminder, today);
+  const dueDateISO = reminderDueDate(reminder, today);
 
-  // Caption under the name: due-day hint when not yet paid, "Paid" when paid.
+  // Format the due date as "Dec 7" (short month + day, no year). If no
+  // due date is set, leave it empty — the subtitle handles that case.
+  let dateLabel = '';
+  if (dueDateISO) {
+    const d = parseISO(dueDateISO);
+    dateLabel = `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+  }
+
+  // Build the subtitle (under the name) and the right-side pill.
   let sub;
+  let pill = null; // { text, variant }
+
   if (paid) {
-    sub = 'Paid this month';
+    sub = dateLabel ? `Paid · ${dateLabel}` : 'Paid this month';
+    pill = { text: 'Paid', variant: 'done' }; // white badge with check
   } else if (dueIn == null) {
-    sub = `${formatMoney(reminder.amount, currency)} due`;
+    sub = 'No due date';
   } else if (dueIn === 0) {
-    sub = 'Due today';
+    sub = dateLabel ? `Due today · ${dateLabel}` : 'Due today';
+    pill = { text: 'Due today', variant: 'today' }; // white pill
   } else if (dueIn > 0) {
-    sub = `Due in ${dueIn} day${dueIn === 1 ? '' : 's'}`;
+    sub = dateLabel ? `${dateLabel} · in ${dueIn} day${dueIn === 1 ? '' : 's'}` : `Due in ${dueIn} day${dueIn === 1 ? '' : 's'}`;
+    pill = { text: 'Upcoming', variant: 'upcoming' }; // blue pill
   } else {
-    sub = `${-dueIn} day${dueIn === -1 ? '' : 's'} overdue`;
+    // Overdue — no pill (the muted text carries the warning, less alarming
+    // than a red badge would be — stays within the monochrome system).
+    const days = -dueIn;
+    sub = dateLabel ? `${dateLabel} · ${days} day${days === 1 ? '' : 's'} overdue` : `${days} day${days === 1 ? '' : 's'} overdue`;
   }
 
   return (
@@ -35,12 +59,18 @@ export default function ReminderCard({ reminder, currency, monthKeyStr, today, o
           <strong>{reminder.name}</strong>
           <span>{sub}</span>
         </div>
-        {paid ? (
-          <span className="badge-done"><Icon name="check" size={11} stroke={3} />Paid</span>
+        {pill ? (
+          pill.variant === 'done' ? (
+            <span className="badge-done"><Icon name="check" size={11} stroke={3} />{pill.text}</span>
+          ) : pill.variant === 'upcoming' ? (
+            <span className="badge-upcoming">{pill.text}</span>
+          ) : (
+            <span className="badge-today">{pill.text}</span>
+          )
         ) : null}
       </div>
       <div className="gstats">
-        <span className="mu">{reminder.dueDay ? `Day ${reminder.dueDay}` : 'No due day'}</span>
+        <span className="mu">{dateLabel || 'No due date'}</span>
         <b className="num">{formatMoney(reminder.amount, currency)}</b>
       </div>
     </button>

@@ -141,13 +141,28 @@ export const reminderMonthStats = (reminders, key) => {
   };
 };
 
-// Days until a reminder's due day this month. Returns null if dueDay is
-// not set. Returns a signed integer: 0 means due today, negative means
-// overdue this month (e.g. -3 = was due 3 days ago, still unpaid).
+// Returns the effective due date as an ISO 'YYYY-MM-DD' string.
+// Prefers the new `dueDate` field; falls back to constructing a date from
+// the legacy `dueDay` field (day-of-month in the current month) for
+// backward compat with reminders created before the dueDate migration.
+// Returns null if the reminder has no due date set at all.
+export const reminderDueDate = (r, today = new Date()) => {
+  if (!r) return null;
+  if (r.dueDate) return r.dueDate;
+  if (r.dueDay) {
+    const dayNum = Math.min(r.dueDay, 28);
+    return toISO(new Date(today.getFullYear(), today.getMonth(), dayNum));
+  }
+  return null;
+};
+
+// Days until a reminder's due date. Returns null if no due date is set.
+// Returns a signed integer: 0 = due today, positive = N days until due,
+// negative = N days past due (overdue).
 export const reminderDueIn = (r, today = new Date()) => {
-  if (!r?.dueDay) return null;
-  const dayNum = Math.min(r.dueDay, 28); // clamp to a safe day-of-month
-  return dayNum - today.getDate();
+  const iso = reminderDueDate(r, today);
+  if (!iso) return null;
+  return daysUntil(iso);
 };
 
 // Real, actionable flags for the bell icon in the header — replacing what
@@ -159,8 +174,8 @@ export const getAlerts = (inc, exp, reminders, key, _startingBalance = 0) => {
   if (ratio != null && ratio > 100) {
     out.push({ id: 'overspend', icon: 'alert', tone: 'warn', text: "You've spent more than you've earned this month." });
   }
-  // Bill overdue alerts: any reminder for the current month that has a
-  // dueDay already past and not yet marked paid.
+  // Bill overdue alerts: any reminder for the current month that's past
+  // its due date and not yet marked paid.
   const today = new Date();
   if (Array.isArray(reminders) && key === monthKeyOfISO(toISO(today))) {
     const overdue = reminders.filter((r) => {
@@ -169,9 +184,10 @@ export const getAlerts = (inc, exp, reminders, key, _startingBalance = 0) => {
       return d != null && d < 0;
     });
     if (overdue.length === 1) {
-      out.push({ id: `reminder-overdue-${overdue[0].id}`, icon: 'flag', tone: 'warn', text: `"${overdue[0].name}" was due ${-reminderDueIn(overdue[0], today)} day${reminderDueIn(overdue[0], today) === -1 ? '' : 's'} ago and isn't marked paid.` });
+      const days = -reminderDueIn(overdue[0], today);
+      out.push({ id: `reminder-overdue-${overdue[0].id}`, icon: 'flag', tone: 'warn', text: `"${overdue[0].name}" was due ${days} day${days === 1 ? '' : 's'} ago and isn't marked paid.` });
     } else if (overdue.length > 1) {
-      out.push({ id: 'reminder-overdue-many', icon: 'flag', tone: 'warn', text: `${overdue.length} bills are past their due day this month and not marked paid.` });
+      out.push({ id: 'reminder-overdue-many', icon: 'flag', tone: 'warn', text: `${overdue.length} bills are past their due date and not marked paid.` });
     }
   }
   return out;

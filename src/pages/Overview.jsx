@@ -12,7 +12,7 @@ import { monthKey, monthLabel } from '../utils/date.js';
 import { formatMoney, clampPct } from '../utils/format.js';
 import {
   monthIncome, monthExpense, monthNet, savingsRate, spendRatio, spendTier,
-  recentTransactions, availableBalance, reminderMonthStats,
+  recentTransactions, availableBalance, reminderMonthStats, reminderDueDate,
 } from '../utils/calc.js';
 
 const RECENT_LIMIT = 4;
@@ -47,13 +47,16 @@ export default function Overview() {
   const avail = availableBalance(incomes, expenses, reminders, state.settings.startingBalance);
   const rstats = reminderMonthStats(reminders, key);
   // Show up to 2 reminders on Overview — unpaid first (most actionable),
-  // then by due day. Falls back to any 2 if everything's already paid.
+  // then by due date. Falls back to any 2 if everything's already paid.
   const unpaid = reminders.filter((r) => !((r.paidMonths || []).includes(key)));
   const remindersToShow = (unpaid.length ? unpaid : reminders)
     .slice()
     .sort((a, b) => {
-      const ad = a.dueDay || 99, bd = b.dueDay || 99;
-      if (ad !== bd) return ad - bd;
+      const aISO = reminderDueDate(a, today);
+      const bISO = reminderDueDate(b, today);
+      if (aISO && bISO) return aISO.localeCompare(bISO);
+      if (aISO) return -1;
+      if (bISO) return 1;
       return a.name.localeCompare(b.name);
     })
     .slice(0, 2);

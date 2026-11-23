@@ -54,16 +54,22 @@ export function buildSampleData() {
   ];
 
   // Reminders replace the old "goals/targets" concept. Each reminder is a
-  // recurring monthly bill the user wants to track paid/unpaid status for.
-  // `paidMonths` is a list of 'YYYY-MM' keys — when the current monthKey is
-  // in the list, the reminder shows as paid for that month. Switching to a
-  // past month in the month nav shows that month's paid state correctly.
+  // bill the user wants to track paid/unpaid status for, with a specific
+  // due date (full ISO 'YYYY-MM-DD'). `paidMonths` is a list of 'YYYY-MM'
+  // keys — when the current monthKey is in the list, the reminder shows
+  // as paid for that month.
+  //
+  // Sample due dates are computed relative to today so they always look
+  // current on a fresh install: rent due 8 days ago, electricity due 2
+  // days ago, internet due today, phone due in 4 days, streaming due in
+  // 12 days — a realistic mix of paid, overdue, and upcoming states.
+  const dISO = (offset) => toISO(addDays(today, offset));
   const reminders = [
-    { id: 'r1', name: 'Rent',           amount: 1800, dueDay: 1,  icon: 'home',   paidMonths: [thisMonth, lastMonth], createdAt: tISO(Date.now() - 86400000 * 90) },
-    { id: 'r2', name: 'Electricity',    amount: 140,  dueDay: 10, icon: 'bolt',   paidMonths: [thisMonth, lastMonth], createdAt: tISO(Date.now() - 86400000 * 90) },
-    { id: 'r3', name: 'Internet',       amount: 64,   dueDay: 15, icon: 'bolt',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 60) },
-    { id: 'r4', name: 'Phone bill',     amount: 40,   dueDay: 5,  icon: 'repeat', paidMonths: [thisMonth],            createdAt: tISO(Date.now() - 86400000 * 30) },
-    { id: 'r5', name: 'Streaming subs', amount: 19.99,dueDay: 20, icon: 'film',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 45) },
+    { id: 'r1', name: 'Rent',           amount: 1800, dueDate: dISO(-8),  icon: 'home',   paidMonths: [thisMonth, lastMonth], createdAt: tISO(Date.now() - 86400000 * 90) },
+    { id: 'r2', name: 'Electricity',    amount: 140,  dueDate: dISO(-2),  icon: 'bolt',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 90) },
+    { id: 'r3', name: 'Internet',       amount: 64,   dueDate: dISO(0),   icon: 'bolt',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 60) },
+    { id: 'r4', name: 'Phone bill',     amount: 40,   dueDate: dISO(4),   icon: 'repeat', paidMonths: [thisMonth],            createdAt: tISO(Date.now() - 86400000 * 30) },
+    { id: 'r5', name: 'Streaming subs', amount: 19.99,dueDate: dISO(12),  icon: 'film',   paidMonths: [lastMonth],            createdAt: tISO(Date.now() - 86400000 * 45) },
   ];
 
   return { sources, incomes, expenses, reminders };

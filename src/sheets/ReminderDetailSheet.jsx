@@ -2,8 +2,8 @@ import Sheet from './Sheet.jsx';
 import { Icon } from '../icons/index.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { formatMoney } from '../utils/format.js';
-import { monthLabel } from '../utils/date.js';
-import { reminderPaidFor, reminderDueIn, reminderMonthStats } from '../utils/calc.js';
+import { monthLabel, niceDate } from '../utils/date.js';
+import { reminderPaidFor, reminderDueIn, reminderDueDate, reminderMonthStats } from '../utils/calc.js';
 
 // ReminderDetailSheet replaces GoalDetailSheet. Shows the reminder's
 // details, a "Mark paid / Mark unpaid" toggle for the current month,
@@ -21,8 +21,11 @@ export default function ReminderDetailSheet({ reminderId }) {
   const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const paid = reminderPaidFor(r, key);
   const dueIn = reminderDueIn(r, today);
+  const dueDateISO = reminderDueDate(r, today);
+  const dueDateLabel = dueDateISO ? niceDate(dueDateISO) : null;
 
-  // Caption for the current-month state.
+  // Caption for the current-month state — uses the actual due date now,
+  // not the old "day X of each month" phrasing that assumed recurring.
   let monthStateText;
   if (paid) {
     monthStateText = `Paid for ${monthLabel(today)}`;
@@ -80,8 +83,8 @@ export default function ReminderDetailSheet({ reminderId }) {
           {formatMoney(r.amount, cur())}
         </div>
         <div className="mu" style={{ marginTop: 4, fontSize: 13.5 }}>{monthStateText}</div>
-        {r.dueDay ? (
-          <div className="mu" style={{ marginTop: 2, fontSize: 12.5 }}>Due on day {r.dueDay} of each month</div>
+        {dueDateLabel ? (
+          <div className="mu" style={{ marginTop: 2, fontSize: 12.5 }}>Due {dueDateLabel}</div>
         ) : null}
       </div>
 

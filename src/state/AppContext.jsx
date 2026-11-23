@@ -345,15 +345,13 @@ export function AppProvider({ children }) {
       },
 
       // Reminders replace the old goals/targets concept. A reminder is a
-      // recurring monthly bill (rent, electricity, phone, etc.) with an
-      // amount and optional day-of-month it's due. `paidMonths` is a list
-      // of 'YYYY-MM' keys tracking which months it's been marked paid in —
-      // toggling paid for the current month adds/removes that key.
-      addReminder: ({ name, amount, dueDay, icon }) => {
+      // bill with a name, amount, optional due date (full ISO 'YYYY-MM-DD'),
+      // and a paidMonths list tracking which months it's been marked paid in.
+      addReminder: ({ name, amount, dueDate, icon }) => {
         const reminder = {
           id: 'r' + Date.now(),
           name, amount,
-          dueDay: dueDay || null,
+          dueDate: dueDate || null,
           icon: icon || 'wallet',
           paidMonths: [],
           createdAt: new Date().toISOString(),
@@ -362,8 +360,8 @@ export function AppProvider({ children }) {
         else dispatch({ type: 'ADD_REMINDER', reminder });
         showToast('Reminder created');
       },
-      updateReminder: (id, { name, amount, dueDay, icon }) => {
-        const patch = { name, amount, dueDay: dueDay || null, icon };
+      updateReminder: (id, { name, amount, dueDate, icon }) => {
+        const patch = { name, amount, dueDate: dueDate || null, icon };
         if (cloudActive) patchDoc(uid, 'reminders', id, patch).catch(cloudFail("Couldn't save the change"));
         else dispatch({ type: 'UPDATE_REMINDER', id, patch });
         showToast('Reminder updated');

@@ -192,6 +192,15 @@ button.hero-orb:active{transform:scale(.9);}
 .goalcard .gstats .mu{font-size:12.5px;}
 .goalcard .gstats b{font-family:var(--hd); font-weight:700; font-size:15px;}
 .badge-done{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; background:var(--ink); color:var(--on-ink);}
+/* Status pills for reminder cards. The "Upcoming" pill uses the single
+   --accent color (the one blue in the whole app) to make upcoming bills
+   visually pop without introducing a new hue — the project owner
+   explicitly asked for upcoming bills to be flagged with a blue pill.
+   "Due today" uses the same shape but in --ink (white) to distinguish
+   urgency without color-coding. Overdue reminders stay as muted text
+   in the subtitle — no pill, less alarming, keeps the monochrome feel. */
+.badge-upcoming{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; background:var(--accent); color:var(--on-accent);}
+.badge-today{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; background:var(--ink); color:var(--on-ink);}
 
 /* charts */
 .linechart{width:100%; margin-top:4px;}

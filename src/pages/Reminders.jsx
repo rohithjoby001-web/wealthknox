@@ -6,7 +6,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import { Icon } from '../icons/index.jsx';
 import { monthKey, monthLabel } from '../utils/date.js';
 import { formatMoney } from '../utils/format.js';
-import { availableBalance, reminderMonthStats, reminderDueIn } from '../utils/calc.js';
+import { availableBalance, reminderMonthStats, reminderDueDate } from '../utils/calc.js';
 
 // Reminders replaces Goals/Targets. Each reminder is a recurring monthly
 // bill (rent, electricity, etc.) with an amount and optional due day.
@@ -27,16 +27,18 @@ export default function Reminders() {
   const avail = availableBalance(incomes, expenses, reminders, state.settings.startingBalance);
   const stats = reminderMonthStats(reminders, key);
 
-  // Sort: unpaid first (so they're actionable), then by due day ascending
+  // Sort: unpaid first (so they're actionable), then by due date ascending
   // (soonest due first), then by name. Paid ones sink to the bottom.
   const sorted = [...reminders].sort((a, b) => {
     const aPaid = (a.paidMonths || []).includes(key);
     const bPaid = (b.paidMonths || []).includes(key);
     if (aPaid !== bPaid) return aPaid ? 1 : -1;
-    // Both unpaid or both paid — sort by due day (nulls last)
-    const ad = a.dueDay || 99;
-    const bd = b.dueDay || 99;
-    if (ad !== bd) return ad - bd;
+    // Both unpaid or both paid — sort by due date (nulls last)
+    const aISO = reminderDueDate(a, today);
+    const bISO = reminderDueDate(b, today);
+    if (aISO && bISO) return aISO.localeCompare(bISO);
+    if (aISO) return -1;
+    if (bISO) return 1;
     return a.name.localeCompare(b.name);
   });
 
