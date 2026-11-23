@@ -5,23 +5,23 @@ import { useApp } from '../state/AppContext.jsx';
 import { REMINDER_ICONS } from '../data/categories.js';
 import { toISO, parseISO } from '../utils/date.js';
 
-// AddReminderSheet — bills the user wants to track paid/unpaid status for,
-// with a specific due date (full ISO 'YYYY-MM-DD').
+// AddReminderSheet — bills the user wants to track paid/unpaid status for.
 //
-// The due-date UI uses two <select> dropdowns (Month + Day) because the
-// native <input type="date"> picker had rendering issues on some devices
-// (the month column wasn't visible). The year is inferred smartly: if the
-// picked month/day is today or later this year, use this year; if it's
-// already passed this year, use next year. This way "December 7" saved
-// in November → "2026-12-07", and "January 5" saved in November → "2027-01-05".
+// Two flavors of due date, picked via a segmented control:
 //
-// When editing, the existing dueDate is parsed back into Month + Day
-// dropdown values so the user sees what they previously picked (no more
-// "December → November" bug where the month got discarded).
+//   1. "Every month" (recurring): the bill is due on the same day of every
+//      month (rent on the 1st, phone on the 27th, etc.). Just pick a Day.
+//      The card always shows the NEXT upcoming occurrence — once this
+//      month's date passes and it's marked paid, it auto-rolls to next
+//      month's date. No manual date editing needed, ever.
 //
-// An ON/OFF toggle pill lets the user disable the due date entirely
-// (some bills don't have a specific due date — they just want to track
-// the amount and paid status).
+//   2. "One-time": a specific due date for a one-off payment. Pick Month +
+//      Day (year is inferred: this year if today-or-later, else next year).
+//      After it passes, shows overdue until marked paid or deleted.
+//
+// The default is "Every month" since most bills people track are recurring.
+//
+// An ON/OFF toggle pill lets the user disable the due date entirely.
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function daysInMonth(monthIdx1) {
@@ -35,13 +35,11 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-// Smart year inference: given a 1-indexed month and day, return the ISO
-// date 'YYYY-MM-DD' for the next occurrence of that month/day from today.
-// If the month/day is today or later this year, use this year; if it's
-// already passed, use next year.
+// Smart year inference for one-time reminders: this year if the picked
+// month/day is today or later, otherwise next year.
 function nextOccurrenceISO(monthIdx1, day, today = new Date()) {
   const yr = today.getFullYear();
-  const candidate = new Date(yr, monthIdx1 - 1, day, 12); // noon to avoid DST edge issues
+  const candidate = new Date(yr, monthIdx1 - 1, day, 12);
   const todayNoon = new Date(yr, today.getMonth(), today.getDate(), 12);
   if (candidate >= todayNoon) return toISO(new Date(yr, monthIdx1 - 1, day));
   return toISO(new Date(yr + 1, monthIdx1 - 1, day));
@@ -53,11 +51,23 @@ export default function AddReminderSheet({ editing }) {
   const [amount, setAmount] = useState(editing ? String(editing.amount) : '');
   const [icon, setIcon] = useState(editing?.icon || REMINDER_ICONS[0]);
 
-  // Parse the existing dueDate (if any) back into Month + Day dropdown
-  // values. This preserves what the user previously picked — no more
-  // "December → November" bug where the month got discarded.
+  // Determine the initial "recurring" mode from the editing reminder.
+  // New reminders default to recurring=true (most bills are monthly).
+  const editingRecurring = editing
+    ? (editing.recurring != null ? editing.recurring : (editing.dueDay != null && !editing.dueDate))
+    : true;
+  const [hasDueDate, setHasDueDate] = useState(!!(editing?.dueDay || editing?.dueDate));
+  const [recurring, setRecurring] = useState(editingRecurring);
+
   const now = new Date();
-  const [hasDueDate, setHasDueDate] = useState(!!editing?.dueDate);
+  // For recurring mode: just a Day dropdown, defaults to the editing
+  // reminder's dueDay or today's date.
+  const [day, setDay] = useState(() => {
+    if (editing?.recurring && editing?.dueDay) return String(editing.dueDay);
+    if (editing?.dueDay) return String(editing.dueDay);
+    return String(now.getDate());
+  });
+  // For one-time mode: Month + Day dropdowns.
   const [month, setMonth] = useState(() => {
     if (editing?.dueDate) {
       const d = parseISO(editing.dueDate);
@@ -65,7 +75,7 @@ export default function AddReminderSheet({ editing }) {
     }
     return String(now.getMonth() + 1);
   });
-  const [day, setDay] = useState(() => {
+  const [oneTimeDay, setOneTimeDay] = useState(() => {
     if (editing?.dueDate) {
       const d = parseISO(editing.dueDate);
       return String(d.getDate());
@@ -73,12 +83,11 @@ export default function AddReminderSheet({ editing }) {
     return String(now.getDate());
   });
 
-  // Clamp day if the user switches to a month with fewer days than the
-  // currently-selected day (e.g. picked 31 then switched to February).
+  // Clamp day if the user switches to a month with fewer days.
   const maxDay = daysInMonth(parseInt(month, 10));
-  const effectiveDay = Math.min(parseInt(day, 10) || 1, maxDay);
-  if (String(effectiveDay) !== day) {
-    setTimeout(() => setDay(String(effectiveDay)), 0);
+  const effectiveOneTimeDay = Math.min(parseInt(oneTimeDay, 10) || 1, maxDay);
+  if (String(effectiveOneTimeDay) !== oneTimeDay) {
+    setTimeout(() => setOneTimeDay(String(effectiveOneTimeDay)), 0);
   }
 
   const save = () => {
@@ -86,17 +95,24 @@ export default function AddReminderSheet({ editing }) {
     const amt = Number(String(amount).replace(/[^0-9.]/g, ''));
     if (!nm) { showToast('Enter a name'); return; }
     if (!(amt > 0)) { showToast('Enter an amount'); return; }
-    // Build the full ISO due date using smart year inference. This
-    // preserves the month (the December→November bug was caused by
-    // discarding the month and only storing the day-of-month).
-    let stored = null;
-    if (hasDueDate) {
-      const m = parseInt(month, 10);
+
+    if (!hasDueDate) {
+      // No due date at all
+      if (editing) updateReminder(editing.id, { name: nm, amount: amt, recurring: false, dueDay: null, dueDate: null, icon });
+      else addReminder({ name: nm, amount: amt, recurring: false, dueDay: null, dueDate: null, icon });
+    } else if (recurring) {
+      // Recurring monthly — store just the day-of-month
       const d = Math.min(31, Math.max(1, parseInt(day, 10) || 1));
-      stored = nextOccurrenceISO(m, d, now);
+      if (editing) updateReminder(editing.id, { name: nm, amount: amt, recurring: true, dueDay: d, dueDate: null, icon });
+      else addReminder({ name: nm, amount: amt, recurring: true, dueDay: d, dueDate: null, icon });
+    } else {
+      // One-time — store the full date with smart year inference
+      const m = parseInt(month, 10);
+      const d = Math.min(31, Math.max(1, parseInt(oneTimeDay, 10) || 1));
+      const iso = nextOccurrenceISO(m, d, now);
+      if (editing) updateReminder(editing.id, { name: nm, amount: amt, recurring: false, dueDay: null, dueDate: iso, icon });
+      else addReminder({ name: nm, amount: amt, recurring: false, dueDay: null, dueDate: iso, icon });
     }
-    if (editing) updateReminder(editing.id, { name: nm, amount: amt, dueDate: stored, icon });
-    else addReminder({ name: nm, amount: amt, dueDate: stored, icon });
     closeSheet();
   };
 
@@ -156,27 +172,52 @@ export default function AddReminderSheet({ editing }) {
         </label>
         {hasDueDate ? (
           <>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                className="input"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                style={{ width: 'auto', flex: '0 0 auto', minWidth: 0, appearance: 'auto', WebkitAppearance: 'auto' }}
-              >
-                {MONTHS.map((m, i) => <option key={i + 1} value={String(i + 1)}>{m}</option>)}
-              </select>
-              <select
-                className="input"
-                value={String(effectiveDay)}
-                onChange={(e) => setDay(e.target.value)}
-                style={{ width: 'auto', flex: 1, minWidth: 0, appearance: 'auto', WebkitAppearance: 'auto' }}
-              >
-                {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
-                  <option key={d} value={String(d)}>{ordinal(d)}</option>
-                ))}
-              </select>
+            {/* Segmented control: Every month vs One-time */}
+            <div className="seg" style={{ marginBottom: 12 }}>
+              <button type="button" className={recurring ? 'on' : ''} onClick={() => setRecurring(true)}>Every month</button>
+              <button type="button" className={!recurring ? 'on' : ''} onClick={() => setRecurring(false)}>One-time</button>
             </div>
-            <p className="helptext">Year is auto-set: this year if the date is today or later, otherwise next year. The full date is what shows on the card.</p>
+            {recurring ? (
+              <>
+                {/* Recurring: just a Day dropdown */}
+                <select
+                  className="input"
+                  value={String(day)}
+                  onChange={(e) => setDay(e.target.value)}
+                  style={{ width: '100%', appearance: 'auto', WebkitAppearance: 'auto' }}
+                >
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                    <option key={d} value={String(d)}>{ordinal(d)} of every month</option>
+                  ))}
+                </select>
+                <p className="helptext">Recurs every month on this day. The card always shows the next upcoming date — once you mark it paid, it auto-rolls to next month.</p>
+              </>
+            ) : (
+              <>
+                {/* One-time: Month + Day dropdowns */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    className="input"
+                    value={month}
+                    onChange={(e) => setMonth(e.target.value)}
+                    style={{ width: 'auto', flex: '0 0 auto', minWidth: 0, appearance: 'auto', WebkitAppearance: 'auto' }}
+                  >
+                    {MONTHS.map((m, i) => <option key={i + 1} value={String(i + 1)}>{m}</option>)}
+                  </select>
+                  <select
+                    className="input"
+                    value={String(effectiveOneTimeDay)}
+                    onChange={(e) => setOneTimeDay(e.target.value)}
+                    style={{ width: 'auto', flex: 1, minWidth: 0, appearance: 'auto', WebkitAppearance: 'auto' }}
+                  >
+                    {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+                      <option key={d} value={String(d)}>{ordinal(d)}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="helptext">One-time due date. Year is auto-set: this year if the date is today or later, otherwise next year. After it passes, the reminder shows overdue until you mark it paid or delete it.</p>
+              </>
+            )}
           </>
         ) : (
           <p className="helptext" style={{ padding: '4px 0' }}>No due date — this reminder will just show its amount and paid status, without "Due in N days" hints.</p>

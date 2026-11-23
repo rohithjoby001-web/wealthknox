@@ -344,14 +344,19 @@ export function AppProvider({ children }) {
         showToast('Entry deleted');
       },
 
-      // Reminders replace the old goals/targets concept. A reminder is a
-      // bill with a name, amount, optional due date (full ISO 'YYYY-MM-DD'),
-      // and a paidMonths list tracking which months it's been marked paid in.
-      addReminder: ({ name, amount, dueDate, icon }) => {
+      // Reminders replace the old goals/targets concept. Two flavors:
+      //   - Recurring monthly: `recurring: true` + `dueDay: number` (e.g. rent
+      //     on the 1st of every month). The card auto-rolls to next month's
+      //     date once marked paid — no manual date editing needed.
+      //   - One-time: `recurring: false` + `dueDate: 'YYYY-MM-DD'` (a specific
+      //     due date for a one-off payment).
+      addReminder: ({ name, amount, recurring, dueDay, dueDate, icon }) => {
         const reminder = {
           id: 'r' + Date.now(),
           name, amount,
-          dueDate: dueDate || null,
+          recurring: !!recurring,
+          dueDay: recurring ? (dueDay || null) : null,
+          dueDate: recurring ? null : (dueDate || null),
           icon: icon || 'wallet',
           paidMonths: [],
           createdAt: new Date().toISOString(),
@@ -360,8 +365,14 @@ export function AppProvider({ children }) {
         else dispatch({ type: 'ADD_REMINDER', reminder });
         showToast('Reminder created');
       },
-      updateReminder: (id, { name, amount, dueDate, icon }) => {
-        const patch = { name, amount, dueDate: dueDate || null, icon };
+      updateReminder: (id, { name, amount, recurring, dueDay, dueDate, icon }) => {
+        const patch = {
+          name, amount,
+          recurring: !!recurring,
+          dueDay: recurring ? (dueDay || null) : null,
+          dueDate: recurring ? null : (dueDate || null),
+          icon,
+        };
         if (cloudActive) patchDoc(uid, 'reminders', id, patch).catch(cloudFail("Couldn't save the change"));
         else dispatch({ type: 'UPDATE_REMINDER', id, patch });
         showToast('Reminder updated');

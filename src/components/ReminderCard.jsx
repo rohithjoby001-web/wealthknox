@@ -1,8 +1,7 @@
 import { Icon } from '../icons/index.jsx';
 import { formatMoney } from '../utils/format.js';
-import { MONTHS_SHORT } from '../utils/date.js';
-import { reminderPaidFor, reminderDueIn, reminderDueDate } from '../utils/calc.js';
-import { parseISO } from '../utils/date.js';
+import { MONTHS_SHORT, parseISO } from '../utils/date.js';
+import { reminderPaidFor, reminderDueIn, reminderDueDate, reminderIsRecurring } from '../utils/calc.js';
 
 // ReminderCard shows a bill's name, amount, and due-date status for the
 // current month. The status is conveyed two ways:
@@ -30,11 +29,14 @@ export default function ReminderCard({ reminder, currency, monthKeyStr, today, o
   }
 
   // Build the subtitle (under the name) and the right-side pill.
+  // For recurring reminders, also show a small "↻ Monthly" tag in the
+  // bottom row so it's clear this is a recurring bill, not a one-time date.
+  const isRecurring = reminderIsRecurring(reminder);
   let sub;
   let pill = null; // { text, variant }
 
   if (paid) {
-    sub = dateLabel ? `Paid · ${dateLabel}` : 'Paid this month';
+    sub = dateLabel ? `Paid · next ${dateLabel}` : 'Paid this month';
     pill = { text: 'Paid', variant: 'done' }; // white badge with check
   } else if (dueIn == null) {
     sub = 'No due date';
@@ -70,7 +72,14 @@ export default function ReminderCard({ reminder, currency, monthKeyStr, today, o
         ) : null}
       </div>
       <div className="gstats">
-        <span className="mu">{dateLabel || 'No due date'}</span>
+        <span className="mu">
+          {isRecurring ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="repeat" size={11} stroke={2.2} style={{ verticalAlign: '-1px' }} />
+              Monthly · day {reminder.dueDay}
+            </span>
+          ) : (dateLabel || 'No due date')}
+        </span>
         <b className="num">{formatMoney(reminder.amount, currency)}</b>
       </div>
     </button>

@@ -3,7 +3,7 @@ import { Icon } from '../icons/index.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { formatMoney } from '../utils/format.js';
 import { monthLabel, niceDate } from '../utils/date.js';
-import { reminderPaidFor, reminderDueIn, reminderDueDate, reminderMonthStats } from '../utils/calc.js';
+import { reminderPaidFor, reminderDueIn, reminderDueDate, reminderIsRecurring, reminderMonthStats } from '../utils/calc.js';
 
 // ReminderDetailSheet replaces GoalDetailSheet. Shows the reminder's
 // details, a "Mark paid / Mark unpaid" toggle for the current month,
@@ -23,12 +23,14 @@ export default function ReminderDetailSheet({ reminderId }) {
   const dueIn = reminderDueIn(r, today);
   const dueDateISO = reminderDueDate(r, today);
   const dueDateLabel = dueDateISO ? niceDate(dueDateISO) : null;
+  const isRecurring = reminderIsRecurring(r);
 
-  // Caption for the current-month state — uses the actual due date now,
-  // not the old "day X of each month" phrasing that assumed recurring.
+  // Caption for the current-month state — uses the actual due date now.
+  // For recurring reminders, the "due date" is the next occurrence (this
+  // month's day if not paid, next month's day if paid).
   let monthStateText;
   if (paid) {
-    monthStateText = `Paid for ${monthLabel(today)}`;
+    monthStateText = isRecurring ? `Paid for ${monthLabel(today)} · next ${dueDateLabel}` : `Paid for ${monthLabel(today)}`;
   } else if (dueIn == null) {
     monthStateText = `Not yet paid for ${monthLabel(today)}`;
   } else if (dueIn === 0) {
@@ -83,7 +85,12 @@ export default function ReminderDetailSheet({ reminderId }) {
           {formatMoney(r.amount, cur())}
         </div>
         <div className="mu" style={{ marginTop: 4, fontSize: 13.5 }}>{monthStateText}</div>
-        {dueDateLabel ? (
+        {isRecurring ? (
+          <div className="mu" style={{ marginTop: 2, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Icon name="repeat" size={12} stroke={2.2} style={{ verticalAlign: '-1px' }} />
+            Recurs on the {(() => { const s = ['th','st','nd','rd']; const v = r.dueDay % 100; return r.dueDay + (s[(v-20)%10] || s[v] || s[0]); })()} of every month
+          </div>
+        ) : dueDateLabel ? (
           <div className="mu" style={{ marginTop: 2, fontSize: 12.5 }}>Due {dueDateLabel}</div>
         ) : null}
       </div>

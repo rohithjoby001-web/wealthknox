@@ -142,18 +142,59 @@ export const reminderMonthStats = (reminders, key) => {
 };
 
 // Returns the effective due date as an ISO 'YYYY-MM-DD' string.
-// Prefers the new `dueDate` field; falls back to constructing a date from
-// the legacy `dueDay` field (day-of-month in the current month) for
-// backward compat with reminders created before the dueDate migration.
-// Returns null if the reminder has no due date set at all.
+//
+// For RECURRING monthly reminders (recurring:true + dueDay):
+//   - If marked paid for the current month → next month's dueDay occurrence
+//     (so the card auto-rolls forward after you mark it paid)
+//   - If not paid for the current month → this month's dueDay occurrence
+//     (whether upcoming or past — past means overdue for this month)
+//
+// For ONE-TIME reminders (dueDate set, recurring false/absent):
+//   - Returns the stored dueDate as-is. After it passes, it shows overdue
+//     until marked paid or deleted.
+//
+// Legacy compat: a reminder with dueDay but no recurring flag is treated
+// as recurring (that was the original intent before the explicit flag).
 export const reminderDueDate = (r, today = new Date()) => {
   if (!r) return null;
+
+  // Determine effective recurring flag — default to true if only dueDay
+  // is present (legacy), false if only dueDate is present.
+  const isRecurring = r.recurring != null
+    ? r.recurring
+    : (r.dueDay != null && !r.dueDate);
+
+  if (isRecurring && r.dueDay != null) {
+    const dayNum = Math.min(r.dueDay, 28); // clamp to a safe day-of-month
+    const thisMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const paidThisMonth = Array.isArray(r.paidMonths) && r.paidMonths.includes(thisMonthKey);
+    if (paidThisMonth) {
+      // Paid this month → next occurrence is next month's dueDay
+      return toISO(new Date(today.getFullYear(), today.getMonth() + 1, dayNum));
+    }
+    // Not paid this month → this month's dueDay (whether past or future)
+    return toISO(new Date(today.getFullYear(), today.getMonth(), dayNum));
+  }
+
+  // One-time reminder
   if (r.dueDate) return r.dueDate;
+
+  // Legacy: dueDay without recurring flag, no dueDate — treat as this month's day
   if (r.dueDay) {
     const dayNum = Math.min(r.dueDay, 28);
     return toISO(new Date(today.getFullYear(), today.getMonth(), dayNum));
   }
+
   return null;
+};
+
+// Whether a reminder is effectively recurring (either explicitly flagged
+// or legacy dueDay-only). Used by the UI to decide whether to show
+// "Recurs on the Xth of every month" vs a specific one-time date.
+export const reminderIsRecurring = (r) => {
+  if (!r) return false;
+  if (r.recurring != null) return r.recurring;
+  return r.dueDay != null && !r.dueDate;
 };
 
 // Days until a reminder's due date. Returns null if no due date is set.
