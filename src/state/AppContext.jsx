@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { buildSampleData } from '../data/sampleData.js';
 import { toISO, parseISO, addMonths, isCurrentMonth, monthKey } from '../utils/date.js';
 import { formatMoney } from '../utils/format.js';
-import { availableBalance } from '../utils/calc.js';
+import { availableBalance, reminderIconToCategoryId } from '../utils/calc.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import {
   subscribeToUserData, ensureSeeded, putDoc, patchDoc, removeDoc,
@@ -398,6 +398,54 @@ export function AppProvider({ children }) {
         if (cloudActive) patchDoc(uid, 'reminders', id, { paidMonths }).catch(cloudFail("Couldn't save — try again"));
         else dispatch({ type: 'TOGGLE_REMINDER_PAID', id, monthKey: key });
         showToast(has ? 'Marked unpaid' : 'Marked paid');
+      },
+      // One-tap "Pay" from the Overview page: marks the reminder paid for
+      // the current month AND creates a corresponding expense entry (with
+      // the amount, a category mapped from the reminder's icon, and today's
+      // date) — so the user doesn't have to separately open Expenses and
+      // log the payment by hand.
+      //
+      // Bypasses the available-balance cap that addExpense enforces: if
+      // someone is paying a real bill, the expense needs to be recorded
+      // even if it pushes the balance negative (that's real information,
+      // not a bug). If the reminder is already marked paid for this month,
+      // we still create the expense (the user might be re-paying or logging
+      // a late payment) but don't toggle the paid flag again.
+      payReminder: (reminderId) => {
+        const r = state.reminders.find((x) => x.id === reminderId);
+        if (!r) return;
+        const key = monthKey(new Date());
+        const alreadyPaid = Array.isArray(r.paidMonths) && r.paidMonths.includes(key);
+
+        // 1. Mark as paid for this month (only if not already)
+        if (!alreadyPaid) {
+          const paidMonths = [...(r.paidMonths || []), key];
+          if (cloudActive) patchDoc(uid, 'reminders', reminderId, { paidMonths }).catch(cloudFail("Couldn't save — try again"));
+          else dispatch({ type: 'TOGGLE_REMINDER_PAID', id: reminderId, monthKey: key });
+        }
+
+        // 2. Create the expense — category mapped from the reminder icon,
+        // note set to the reminder name so it shows in the expense list
+        // with context. Bypasses the available-balance cap intentionally.
+        const categoryId = reminderIconToCategoryId(r.icon);
+        const expense = {
+          id: 'e' + Date.now(),
+          amount: r.amount,
+          categoryId,
+          note: r.name,
+          date: toISO(new Date()),
+          createdAt: new Date().toISOString(),
+        };
+        // For 'other' category, also set customName so the expense title
+        // shows the bill name instead of the generic "Other" label.
+        if (categoryId === 'other') {
+          expense.customName = r.name;
+          expense.note = '';
+        }
+        if (cloudActive) putDoc(uid, 'expenses', expense).catch(cloudFail("Couldn't save the expense — try again"));
+        else dispatch({ type: 'ADD_EXPENSE', expense });
+
+        showToast(`Paid ${formatMoney(r.amount, cur())} for ${r.name}`);
       },
 
       addSource: ({ name, icon }) => {

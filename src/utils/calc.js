@@ -234,6 +234,27 @@ export const getAlerts = (inc, exp, reminders, key, _startingBalance = 0) => {
   return out;
 };
 
+// Maps a reminder's icon to the most fitting expense category ID, so
+// when the user taps "Pay" on a reminder from the Overview page, the
+// auto-created expense lands in the right category without the user
+// having to pick one. Falls back to 'bills' for unmapped icons (most
+// reminders are bills anyway).
+const REMINDER_ICON_TO_CATEGORY = {
+  home: 'housing',
+  bolt: 'bills',
+  repeat: 'subscriptions',
+  film: 'subscriptions',   // streaming → subscriptions
+  cart: 'groceries',
+  heart: 'health',
+  book: 'education',
+  shield: 'bills',         // insurance → bills
+  wallet: 'other',
+  car: 'transport',
+  gift: 'other',
+  plane: 'travel',
+};
+export const reminderIconToCategoryId = (icon) => REMINDER_ICON_TO_CATEGORY[icon] || 'bills';
+
 export const groupByDay = (list) => {
   const m = {};
   list.forEach((x) => { (m[x.date] = m[x.date] || []).push(x); });

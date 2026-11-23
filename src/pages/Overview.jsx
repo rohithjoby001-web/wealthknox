@@ -13,6 +13,7 @@ import { formatMoney, clampPct } from '../utils/format.js';
 import {
   monthIncome, monthExpense, monthNet, savingsRate, spendRatio, spendTier,
   recentTransactions, availableBalance, reminderMonthStats, reminderDueDate,
+  reminderDueIn,
 } from '../utils/calc.js';
 
 const RECENT_LIMIT = 4;
@@ -30,7 +31,7 @@ function CurrencyBadge({ symbol, size = 22 }) {
 }
 
 export default function Overview() {
-  const { state, setTab, openSheet, cur } = useApp();
+  const { state, setTab, openSheet, cur, payReminder } = useApp();
   const { incomes, expenses, reminders, sources } = state;
   const [recentExpanded, setRecentExpanded] = useState(false);
   const today = new Date();
@@ -60,6 +61,22 @@ export default function Overview() {
       return a.name.localeCompare(b.name);
     })
     .slice(0, 2);
+
+  // Bills that need action NOW: due today or overdue, not yet paid.
+  // These show in a dedicated "Pay today" section with one-tap Pay
+  // buttons that mark the reminder paid AND create an expense entry.
+  const payToday = reminders
+    .filter((r) => {
+      if ((r.paidMonths || []).includes(key)) return false; // already paid
+      const dueIn = reminderDueIn(r, today);
+      return dueIn != null && dueIn <= 0; // due today (0) or overdue (negative)
+    })
+    .sort((a, b) => {
+      // Most overdue first (most negative dueIn first)
+      const aIn = reminderDueIn(a, today);
+      const bIn = reminderDueIn(b, today);
+      return aIn - bIn;
+    });
 
   return (
     <>
@@ -109,6 +126,39 @@ export default function Overview() {
       </div>
 
       {inc > 0 ? <HealthCard tier={tier} ratio={ratio} rate={rate} /> : null}
+
+      {payToday.length > 0 ? (
+        <>
+          <div className="section-h"><h2>Pay today</h2></div>
+          <div className="card">
+            {payToday.map((r, idx) => {
+              const dueIn = reminderDueIn(r, today);
+              const sub = dueIn === 0 ? 'Due today' : `${-dueIn} day${-dueIn === 1 ? '' : 's'} overdue`;
+              return (
+                <div key={r.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: idx === 0 ? '4px 0' : '12px 0',
+                  borderTop: idx === 0 ? 'none' : '1px solid var(--line)',
+                }}>
+                  <i className="th"><Icon name={r.icon} size={18} stroke={1.9} /></i>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ fontSize: 14.5, fontWeight: 600 }}>{r.name}</strong>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--mu)', marginTop: 1 }}>{sub}</span>
+                  </div>
+                  <b className="num" style={{ fontSize: 15, fontWeight: 700 }}>{formatMoney(r.amount, cur())}</b>
+                  <button
+                    className="btn primary sm"
+                    onClick={() => payReminder(r.id)}
+                    style={{ padding: '8px 14px', flex: '0 0 auto' }}
+                  >
+                    <Icon name="check" size={14} stroke={2.4} />Pay
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
 
       {reminders.length > 0 ? (
         <>
