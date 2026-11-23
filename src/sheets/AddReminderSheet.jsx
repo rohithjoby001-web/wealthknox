@@ -3,16 +3,32 @@ import Sheet from './Sheet.jsx';
 import { Icon } from '../icons/index.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { REMINDER_ICONS } from '../data/categories.js';
+import { toISO } from '../utils/date.js';
 
 // AddReminderSheet replaces AddGoalSheet. Same Sheet skeleton (name,
 // amount, icon picker), but instead of a target-date field it has an
-// optional due-day-of-month input (1–31) — what day of the month this
-// bill is typically due, so the card can show "Due in N days" / "Overdue".
+// optional due-date picker. Under the hood the app only stores the
+// day-of-month (since reminders are recurring monthly bills), but a
+// date picker is a more familiar input than asking for a bare "day 5"
+// — the user picks any date, we extract the day part.
+//
+// When editing an existing reminder that already has a dueDay, the
+// picker defaults to that day in the current month (so the user sees a
+// real date in the field they can adjust), instead of an empty picker
+// that would imply "no due date set".
 export default function AddReminderSheet({ editing }) {
   const { closeSheet, openSheet, addReminder, updateReminder, deleteReminder, showToast, cur } = useApp();
   const [name, setName] = useState(editing?.name || '');
   const [amount, setAmount] = useState(editing ? String(editing.amount) : '');
-  const [dueDay, setDueDay] = useState(editing?.dueDay ? String(editing.dueDay) : '');
+  // If editing a reminder that already has a dueDay, default the date
+  // picker to that day-of-month in the current month/year. Otherwise
+  // leave it empty (the user can pick a date or skip).
+  const [dueDate, setDueDate] = useState(() => {
+    if (!editing?.dueDay) return '';
+    const now = new Date();
+    const d = Math.min(editing.dueDay, 28); // clamp to a safe day-of-month
+    return toISO(new Date(now.getFullYear(), now.getMonth(), d));
+  });
   const [icon, setIcon] = useState(editing?.icon || REMINDER_ICONS[0]);
 
   const save = () => {
@@ -20,10 +36,15 @@ export default function AddReminderSheet({ editing }) {
     const amt = Number(String(amount).replace(/[^0-9.]/g, ''));
     if (!nm) { showToast('Enter a name'); return; }
     if (!(amt > 0)) { showToast('Enter an amount'); return; }
-    // Due day is optional — empty string becomes null. Clamp to 1–31.
+    // Extract the day-of-month from the picked date. The month and year
+    // are discarded — reminders are recurring monthly, so only the day
+    // matters. Empty date → null (no due day tracked).
     let day = null;
-    if (dueDay) {
-      day = Math.min(31, Math.max(1, parseInt(String(dueDay).replace(/[^0-9]/g, ''), 10) || 0));
+    if (dueDate) {
+      const parts = dueDate.split('-'); // 'YYYY-MM-DD'
+      if (parts.length === 3) {
+        day = Math.min(31, Math.max(1, parseInt(parts[2], 10) || 0));
+      }
     }
     if (editing) updateReminder(editing.id, { name: nm, amount: amt, dueDay: day, icon });
     else addReminder({ name: nm, amount: amt, dueDay: day, icon });
@@ -69,9 +90,9 @@ export default function AddReminderSheet({ editing }) {
         </div>
       </div>
       <div className="field">
-        <label>Due day of month (optional)</label>
-        <input className="input" inputMode="numeric" placeholder="e.g. 5 — empty if not sure" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
-        <p className="helptext">Used to show "Due in N days" or "Overdue" on the card.</p>
+        <label>Due date (optional)</label>
+        <input className="input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        <p className="helptext">Pick any date — we use the day of the month as the recurring due day each month. Leave empty if you don't want due-day reminders.</p>
       </div>
       <div className="field" style={{ marginBottom: 4 }}>
         <label>Icon</label>
