@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from './state/AppContext.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import Toast from './components/Toast.jsx';
@@ -20,8 +20,18 @@ const PAGES = {
 };
 
 export default function App() {
-  const { state } = useApp();
+  const { state, settingsReady, openSheet, sheet } = useApp();
   const [showSplash, setShowSplash] = useState(true);
+  // First launch: once the splash is gone and settings have loaded, ask
+  // for a starting balance (once — "Skip for now" marks it answered).
+  const prompted = useRef(false);
+  useEffect(() => {
+    if (prompted.current || showSplash || !settingsReady || sheet) return;
+    if (!state.settings.onboarded) {
+      prompted.current = true;
+      openSheet({ kind: 'starting-balance', onboarding: true });
+    }
+  }, [showSplash, settingsReady, sheet, state.settings.onboarded, openSheet]);
   const Page = PAGES[state.tab] || Overview;
 
   return (

@@ -4,7 +4,8 @@ import { Icon } from '../icons/index.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { CATEGORIES } from '../data/categories.js';
 import { toISO } from '../utils/date.js';
-import { availableBalance } from '../utils/calc.js';
+import { availableFor, countsTowardBalance } from '../utils/calc.js';
+import { niceDate } from '../utils/date.js';
 import { formatMoney } from '../utils/format.js';
 
 export default function AddExpenseSheet({ editing }) {
@@ -22,7 +23,8 @@ export default function AddExpenseSheet({ editing }) {
   // An expense can't be logged past what's actually available — when
   // editing, add the entry's own current amount back in, since it's
   // already subtracted once in this figure.
-  const avail = availableBalance(state.incomes, state.expenses, state.reminders, state.settings.startingBalance) + (editing?.amount || 0);
+  const avail = availableFor(state.incomes, state.expenses, state.settings) + (editing && countsTowardBalance(editing.date, state.settings) ? editing.amount : 0);
+  const beforeStart = !countsTowardBalance(date, state.settings);
 
   const isOther = categoryId === 'other';
 
@@ -72,7 +74,9 @@ export default function AddExpenseSheet({ editing }) {
           <input inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </div>
         <p className="helptext">
-          {avail > 0 ? `${formatMoney(avail, cur())} available` : "You're out of available balance — add income first."}
+          {beforeStart
+            ? `Dated before your starting balance (${niceDate(state.settings.startingDate)}), so it won't change Available.`
+            : avail > 0 ? `${formatMoney(avail, cur())} available` : "You're out of available balance — add income or adjust your balance first."}
         </p>
       </div>
       <div className="field">

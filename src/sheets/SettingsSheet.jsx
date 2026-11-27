@@ -3,35 +3,25 @@ import Sheet from './Sheet.jsx';
 import { Icon } from '../icons/index.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { useInstallPrompt } from '../pwa/useInstallPrompt.jsx';
+import { niceDate } from '../utils/date.js';
+import { formatMoney } from '../utils/format.js';
 
 const CURRENCIES = ['$', '₹', '€', '£'];
 
 const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
 
 export default function SettingsSheet() {
-  const { state, closeSheet, openSheet, setCurrency, setStartingBalance, resetAll, exportData, importData, showToast, cloudActive } = useApp();
+  const { state, closeSheet, openSheet, setCurrency, resetAll, exportData, importData, showToast, cloudActive } = useApp();
   const { canInstall, installed, promptInstall } = useInstallPrompt();
   const fileInputRef = useRef(null);
-  const [sbInput, setSbInput] = useState(String(state.settings.startingBalance || ''));
-
-  const commitStartingBalance = () => {
-    const n = Math.max(0, parseFloat(sbInput) || 0);
-    setSbInput(n ? String(n) : '');
-    if (n !== (state.settings.startingBalance || 0)) setStartingBalance(n);
-  };
-  // Drives the save button's look — filled once you've typed something
-  // that hasn't been committed yet, so it's clear there's a pending change
-  // and clear once it's saved, rather than leaving people to guess whether
-  // tapping away or pressing Enter actually did anything.
-  const sbDirty = Math.max(0, parseFloat(sbInput) || 0) !== (state.settings.startingBalance || 0);
 
   const askReset = () => {
     openSheet({
       kind: 'confirm',
       title: 'Reset everything?',
       text: cloudActive
-        ? "This clears every expense, income entry, source, reminder and your starting balance from your account, on every device. This can't be undone."
-        : "This clears every expense, income entry, source, reminder and your starting balance. This can't be undone.",
+        ? "This clears every expense, income entry, source, reminder, your starting balance and adjustments from your account, on every device. This can't be undone."
+        : "This clears every expense, income entry, source, reminder, your starting balance and adjustments. This can't be undone.",
       confirmLabel: 'Reset',
       onConfirm: resetAll,
     });
@@ -100,32 +90,16 @@ export default function SettingsSheet() {
       ) : null}
       <div className="field">
         <label>Starting balance</label>
-        <div className="amtfield">
-          <span className="cur">{state.settings.currency}</span>
-          <input
-            inputMode="decimal"
-            placeholder="0"
-            value={sbInput}
-            onChange={(e) => setSbInput(e.target.value)}
-            onBlur={commitStartingBalance}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          />
-          <button
-            type="button"
-            aria-label="Save starting balance"
-            onClick={commitStartingBalance}
-            style={{
-              width: 36, height: 36, minWidth: 36, borderRadius: '50%', border: 'none',
-              display: 'grid', placeItems: 'center', transition: '.15s',
-              background: sbDirty ? 'var(--ink)' : 'var(--surface-3)',
-              color: sbDirty ? 'var(--on-ink)' : 'var(--mu)',
-            }}
-          >
-            <Icon name="check" size={16} stroke={2.4} />
-          </button>
+        <div className="note" style={{ marginBottom: 10 }}>
+          <span>{state.settings.startingDate ? `From ${niceDate(state.settings.startingDate)}` : state.settings.startingBalance > 0 ? 'No date set' : 'Not set yet'}</span>
+          <b className="num">{formatMoney(state.settings.startingBalance || 0, state.settings.currency)}</b>
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost sm" onClick={() => openSheet({ kind: 'starting-balance' })}><Icon name="edit" size={14} stroke={2} />{state.settings.startingBalance > 0 || state.settings.startingDate ? 'Change' : 'Set'}</button>
+          <button className="btn ghost sm" onClick={() => openSheet({ kind: 'adjust-balance' })}><Icon name="repeat" size={14} stroke={2} />Adjust balance</button>
         </div>
         <p className="helptext">
-          What you're starting with (e.g. your current bank balance) — counted toward "Available", but kept out of your monthly and yearly income totals so Reports only shows what you actually earned. Type it, then tap the check to save.
+          What you had on a given day (e.g. your bank + cash). Entries from that day on are added or subtracted to give "Available". Use Adjust balance whenever the app and your bank don't match. Neither counts as income in Reports.
         </p>
       </div>
       <div className="divider" />

@@ -6,7 +6,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import { Icon } from '../icons/index.jsx';
 import { monthKey, monthLabel } from '../utils/date.js';
 import { formatMoney } from '../utils/format.js';
-import { availableBalance, reminderMonthStats, reminderDueDate } from '../utils/calc.js';
+import { availableFor, reminderMonthStats, reminderDueDate } from '../utils/calc.js';
 
 // Reminders replaces Goals/Targets. Each reminder is a recurring monthly
 // bill (rent, electricity, etc.) with an amount and optional due day.
@@ -24,7 +24,7 @@ export default function Reminders() {
   const today = new Date();
   const key = monthKey(today);
 
-  const avail = availableBalance(incomes, expenses, reminders, state.settings.startingBalance);
+  const avail = availableFor(incomes, expenses, state.settings);
   const stats = reminderMonthStats(reminders, key);
 
   // Sort: unpaid first (so they're actionable), then by due date ascending

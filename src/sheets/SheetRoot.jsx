@@ -11,6 +11,8 @@ import ConfirmSheet from './ConfirmSheet.jsx';
 import AlertsSheet from './AlertsSheet.jsx';
 import AccountSheet from './AccountSheet.jsx';
 import DateRangeSheet from './DateRangeSheet.jsx';
+import StartingBalanceSheet from './StartingBalanceSheet.jsx';
+import AdjustBalanceSheet from './AdjustBalanceSheet.jsx';
 
 export default function SheetRoot() {
   const { sheet, closeSheet } = useApp();
@@ -37,6 +39,10 @@ function SheetBody({ sheet }) {
       return <AccountSheet />;
     case 'date-range':
       return <DateRangeSheet initialFrom={sheet.initialFrom} initialTo={sheet.initialTo} onApply={sheet.onApply} />;
+    case 'starting-balance':
+      return <StartingBalanceSheet onboarding={!!sheet.onboarding} />;
+    case 'adjust-balance':
+      return <AdjustBalanceSheet />;
     case 'add-expense':
       return <AddExpenseSheet editing={sheet.editing} />;
     case 'add-income':

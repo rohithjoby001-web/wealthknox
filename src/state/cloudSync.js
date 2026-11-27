@@ -87,7 +87,7 @@ export async function resetAllCloud(uid) {
   // Starting balance is a money figure tied to this data, not a display
   // preference like currency — a "reset everything" that left an old
   // balance behind would show money that no longer traces back to anything.
-  await setDoc(userDocRef(uid), { startingBalance: 0 }, { merge: true });
+  await setDoc(userDocRef(uid), { startingBalance: 0, startingDate: null, adjustments: [], onboarded: false }, { merge: true });
 }
 
 // Backs the Import-backup flow in Settings: wipe every entity collection
@@ -98,6 +98,13 @@ export async function replaceAllCloud(uid, payload) {
     ENTITY_COLLECTIONS.forEach((entity) => {
       (payload[entity] || []).forEach((item) => op((b) => b.set(entityDocRef(uid, entity, item.id), item)));
     });
-    op((b) => b.set(userDocRef(uid), { currency: payload.settings?.currency || '$', startingBalance: payload.settings?.startingBalance || 0, chartRange: payload.chartRange || 6 }));
+    op((b) => b.set(userDocRef(uid), {
+      currency: payload.settings?.currency || '$',
+      startingBalance: payload.settings?.startingBalance || 0,
+      startingDate: payload.settings?.startingDate || null,
+      adjustments: Array.isArray(payload.settings?.adjustments) ? payload.settings.adjustments : [],
+      onboarded: true,
+      chartRange: payload.chartRange || 6,
+    }));
   });
 }

@@ -8,11 +8,11 @@ import ExpandToggle from '../components/ExpandToggle.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ReminderCard from '../components/ReminderCard.jsx';
 import { Icon } from '../icons/index.jsx';
-import { monthKey, monthLabel } from '../utils/date.js';
+import { monthKey, monthLabel, niceDate } from '../utils/date.js';
 import { formatMoney, clampPct } from '../utils/format.js';
 import {
   monthIncome, monthExpense, monthNet, savingsRate, spendRatio, spendTier,
-  recentTransactions, availableBalance, reminderMonthStats, reminderDueDate,
+  recentTransactions, availableFor, reminderMonthStats, reminderDueDate,
   reminderDueIn,
 } from '../utils/calc.js';
 
@@ -45,7 +45,13 @@ export default function Overview() {
   const tier = spendTier(ratio);
   const recentPool = recentTransactions(incomes, expenses, sources, 20);
   const recent = recentExpanded ? recentPool : recentPool.slice(0, RECENT_LIMIT);
-  const avail = availableBalance(incomes, expenses, reminders, state.settings.startingBalance);
+  const avail = availableFor(incomes, expenses, state.settings);
+  const s = state.settings;
+  const availDetail = avail < 0
+    ? "Below zero — tap to check or adjust"
+    : s.startingDate
+      ? `From ${formatMoney(s.startingBalance || 0, cur())} on ${niceDate(s.startingDate)} · tap to adjust`
+      : s.startingBalance > 0 ? 'Tap to check or adjust' : 'Tap to set your starting balance';
   const rstats = reminderMonthStats(reminders, key);
   // Show up to 2 reminders on Overview — unpaid first (most actionable),
   // then by due date. Falls back to any 2 if everything's already paid.
@@ -119,9 +125,9 @@ export default function Overview() {
           icon="wallet"
           label="Available"
           amount={avail}
-          detail={avail < 0 ? "Spending has passed what you've earned" : null}
+          detail={availDetail}
           currency={cur()}
-          onClick={() => setTab('income')}
+          onClick={() => openSheet(s.startingBalance > 0 || s.startingDate ? { kind: 'adjust-balance' } : { kind: 'starting-balance' })}
         />
       </div>
 

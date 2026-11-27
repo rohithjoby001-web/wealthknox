@@ -16,6 +16,28 @@ export const netBalance = (inc, exp) => sum(inc) - sum(exp);
 // here is now just starting balance + net of all income/expense entries.
 export const availableBalance = (inc, exp, _reminders = null, startingBalance = 0) =>
   startingBalance + netBalance(inc, exp);
+
+// ---------- dated starting point + balance adjustments ----------
+// The starting balance is "what I had at the START of `startingDate`".
+// Only entries dated on/after that day move it — anything earlier is
+// already baked into the figure the person typed, so counting it again
+// would double-count. With no startingDate (older data, set before this
+// existed) every entry counts, exactly like before.
+//
+// Adjustments are "my bank says X" corrections (see AdjustBalanceSheet).
+// They live in settings, never in incomes/expenses, so they move the
+// Available balance without ever showing up as earnings or spending in
+// Overview's month figures or in Reports.
+export const countsTowardBalance = (iso, settings) =>
+  !settings?.startingDate || iso >= settings.startingDate;
+export const adjustmentsTotal = (settings) =>
+  (Array.isArray(settings?.adjustments) ? settings.adjustments : []).reduce((a, x) => a + (Number(x.amount) || 0), 0);
+export const availableFor = (inc, exp, settings) => {
+  const s = settings || {};
+  const i = inc.filter((x) => countsTowardBalance(x.date, s));
+  const e = exp.filter((x) => countsTowardBalance(x.date, s));
+  return (Number(s.startingBalance) || 0) + netBalance(i, e) + adjustmentsTotal(s);
+};
 export const monthIncome = (inc, key) => sum(inMonth(inc, key));
 export const monthExpense = (exp, key) => sum(inMonth(exp, key));
 export const monthNet = (inc, exp, key) => monthIncome(inc, key) - monthExpense(exp, key);

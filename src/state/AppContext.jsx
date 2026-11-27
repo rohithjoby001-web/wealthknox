@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { buildSampleData } from '../data/sampleData.js';
 import { toISO, parseISO, addMonths, isCurrentMonth, monthKey } from '../utils/date.js';
 import { formatMoney } from '../utils/format.js';
-import { availableBalance, reminderIconToCategoryId } from '../utils/calc.js';
+import { availableFor, countsTowardBalance, reminderIconToCategoryId } from '../utils/calc.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import {
   subscribeToUserData, ensureSeeded, putDoc, patchDoc, removeDoc,
@@ -10,6 +10,21 @@ import {
 } from './cloudSync.js';
 
 const STORAGE_KEY = 'wealthknox:state:v1';
+
+// startingDate: 'YYYY-MM-DD' the starting balance applies from (null =
+// legacy, counts every entry). adjustments: balance corrections made via
+// "Adjust balance". onboarded: the first-run starting-balance prompt has
+// been answered or skipped.
+const DEFAULT_SETTINGS = { currency: '$', startingBalance: 0, startingDate: null, adjustments: [], onboarded: false };
+const settingsFrom = (d) => ({
+  currency: d?.currency || '$',
+  startingBalance: Number(d?.startingBalance) || 0,
+  startingDate: d?.startingDate || null,
+  adjustments: Array.isArray(d?.adjustments) ? d.adjustments : [],
+  // Anyone who already set a starting balance before this prompt existed
+  // has effectively been onboarded — don't nag them.
+  onboarded: !!d?.onboarded || (Number(d?.startingBalance) || 0) > 0,
+});
 const TOAST_MS = 2400;
 
 /* ---------- initial / persisted data state ----------
@@ -23,7 +38,7 @@ function initData() {
     monthDate: new Date(),
     filterCat: 'all',
     chartRange: 6,
-    settings: { currency: '$', startingBalance: 0 },
+    settings: { ...DEFAULT_SETTINGS },
     ...sample,
   };
 }
@@ -52,7 +67,7 @@ function normalizeSaved(saved) {
     monthDate: saved.monthDate ? parseISO(saved.monthDate) : new Date(),
     filterCat: saved.filterCat || 'all',
     chartRange: saved.chartRange || 6,
-    settings: Object.assign({ currency: '$', startingBalance: 0 }, saved.settings || {}),
+    settings: settingsFrom(saved.settings),
     sources: Array.isArray(saved.sources) ? saved.sources : [],
     incomes: Array.isArray(saved.incomes) ? saved.incomes : [],
     expenses: Array.isArray(saved.expenses) ? saved.expenses : [],
@@ -106,6 +121,8 @@ function reducer(state, action) {
       return { ...state, settings: { ...state.settings, currency: action.currency } };
     case 'SET_STARTING_BALANCE':
       return { ...state, settings: { ...state.settings, startingBalance: action.value } };
+    case 'PATCH_SETTINGS':
+      return { ...state, settings: { ...state.settings, ...action.patch } };
 
     case 'ADD_EXPENSE':
       return { ...state, expenses: [...state.expenses, action.expense] };
@@ -168,7 +185,7 @@ function reducer(state, action) {
       // Starting balance is money tied to this data, not a display preference
       // like currency — a "reset everything" that left it behind would show
       // an Available figure with nothing behind it.
-      return { ...state, sources: [], incomes: [], expenses: [], reminders: [], settings: { ...state.settings, startingBalance: 0 } };
+      return { ...state, sources: [], incomes: [], expenses: [], reminders: [], settings: { ...state.settings, startingBalance: 0, startingDate: null, adjustments: [], onboarded: false } };
 
     default:
       return state;
@@ -192,6 +209,10 @@ export function AppProvider({ children }) {
   const [toastMsg, setToastMsg] = useState('');
   const toastTimer = useRef(null);
   const hydrated = useRef(false);
+  // True once settings have actually loaded (localStorage read, or the
+  // first Firestore snapshot) — the first-run prompt waits for this so it
+  // never flashes up for someone whose settings just haven't arrived yet.
+  const [settingsReady, setSettingsReady] = useState(false);
 
   // Local-only mode: load any saved data once, on first mount. If
   // nothing is saved yet (brand-new install), the bundled sample data
@@ -202,6 +223,7 @@ export function AppProvider({ children }) {
     const saved = loadPersisted();
     if (saved) dispatch({ type: 'HYDRATE', payload: saved });
     hydrated.current = true;
+    setSettingsReady(true);
   }, [cloudActive]);
 
   // Local-only mode: persist on every data change (skip the very first
@@ -228,7 +250,8 @@ export function AppProvider({ children }) {
       if (cancelled) return;
       unsubscribe = subscribeToUserData(uid, (entity, data) => {
         if (entity === 'settings') {
-          if (data) dispatch({ type: 'HYDRATE', payload: { settings: { currency: data.currency || '$', startingBalance: data.startingBalance || 0 }, chartRange: data.chartRange ?? 6 } });
+          if (data) dispatch({ type: 'HYDRATE', payload: { settings: settingsFrom(data), chartRange: data.chartRange ?? 6 } });
+          setSettingsReady(true);
         } else {
           dispatch({ type: 'HYDRATE', payload: { [entity]: data } });
         }
@@ -259,6 +282,7 @@ export function AppProvider({ children }) {
       openSheet,
       closeSheet,
       cloudActive,
+      settingsReady,
 
       setTab: (tab) => dispatch({ type: 'SET_TAB', tab }),
       prevMonth: () => dispatch({ type: 'PREV_MONTH' }),
@@ -281,6 +305,40 @@ export function AppProvider({ children }) {
         else dispatch({ type: 'SET_STARTING_BALANCE', value: n });
         showToast('Starting balance updated');
       },
+      // Sets the dated starting point ("I had X at the start of DATE").
+      // A new starting point replaces any earlier adjustments — they were
+      // corrections against the old figure and would be wrong on the new one.
+      setStartingPoint: ({ amount, date }) => {
+        const patch = { startingBalance: Math.max(0, Number(amount) || 0), startingDate: date || toISO(new Date()), adjustments: [], onboarded: true };
+        if (cloudActive) putSettings(uid, patch).catch(cloudFail("Couldn't save — try again"));
+        else dispatch({ type: 'PATCH_SETTINGS', patch });
+        showToast('Starting balance saved');
+      },
+      dismissOnboarding: () => {
+        const patch = { onboarded: true };
+        if (cloudActive) putSettings(uid, patch).catch(() => {});
+        else dispatch({ type: 'PATCH_SETTINGS', patch });
+      },
+      // "My bank actually shows X": records the difference as an
+      // adjustment so Available matches reality, without inventing a fake
+      // income or expense that would distort Reports.
+      adjustBalanceTo: (actual, note = '') => {
+        const current = availableFor(state.incomes, state.expenses, state.settings);
+        const diff = Math.round((Number(actual) - current) * 100) / 100;
+        if (!isFinite(diff) || diff === 0) { showToast('Already matches — nothing to adjust'); return false; }
+        const adj = { id: 'a' + Date.now(), amount: diff, date: toISO(new Date()), note: note || '', createdAt: new Date().toISOString() };
+        const adjustments = [...(state.settings.adjustments || []), adj];
+        if (cloudActive) putSettings(uid, { adjustments }).catch(cloudFail("Couldn't save — try again"));
+        else dispatch({ type: 'PATCH_SETTINGS', patch: { adjustments } });
+        showToast(`Balance adjusted by ${diff < 0 ? '−' : '+'}${formatMoney(Math.abs(diff), state.settings.currency)}`);
+        return true;
+      },
+      deleteAdjustment: (id) => {
+        const adjustments = (state.settings.adjustments || []).filter((a) => a.id !== id);
+        if (cloudActive) putSettings(uid, { adjustments }).catch(cloudFail("Couldn't delete — try again"));
+        else dispatch({ type: 'PATCH_SETTINGS', patch: { adjustments } });
+        showToast('Adjustment removed');
+      },
 
       // Income is meant to represent real money (your actual balance or
       // deposits), so an expense can never be recorded past what's
@@ -293,8 +351,10 @@ export function AppProvider({ children }) {
       // `customName` is set only when the user picks the "Other" category
       // and names the expense themselves — see AddExpenseSheet.
       addExpense: ({ amount, categoryId, note, date, customName }) => {
-        const avail = availableBalance(state.incomes, state.expenses, state.reminders, state.settings.startingBalance);
-        if (amount > avail) { showToast(`Only ${formatMoney(avail, state.settings.currency)} available`); return false; }
+        const avail = availableFor(state.incomes, state.expenses, state.settings);
+        // An expense dated before the starting point is already inside the
+        // starting figure, so it can't overdraw anything — no cap for it.
+        if (countsTowardBalance(date, state.settings) && amount > avail) { showToast(`Only ${formatMoney(avail, state.settings.currency)} available`); return false; }
         const expense = { id: 'e' + Date.now(), amount, categoryId, note, date, createdAt: new Date().toISOString() };
         if (categoryId === 'other' && customName) expense.customName = customName;
         if (cloudActive) putDoc(uid, 'expenses', expense).catch(cloudFail("Couldn't save — try again"));
@@ -307,8 +367,9 @@ export function AppProvider({ children }) {
         // current available balance, so add its old amount back before
         // checking the new one against the cap.
         const prev = state.expenses.find((x) => x.id === id);
-        const avail = availableBalance(state.incomes, state.expenses, state.reminders, state.settings.startingBalance) + (prev?.amount || 0);
-        if (amount > avail) { showToast(`Only ${formatMoney(avail, state.settings.currency)} available`); return false; }
+        const prevCounted = prev && countsTowardBalance(prev.date, state.settings) ? prev.amount : 0;
+        const avail = availableFor(state.incomes, state.expenses, state.settings) + prevCounted;
+        if (countsTowardBalance(date, state.settings) && amount > avail) { showToast(`Only ${formatMoney(avail, state.settings.currency)} available`); return false; }
         // Build the patch — include customName only when it's set on an
         // Other-category expense; otherwise strip it from the stored doc
         // so a category change away from Other doesn't leave a stale name.
@@ -490,7 +551,7 @@ export function AppProvider({ children }) {
         return true;
       },
     };
-  }, [state, sheet, toastMsg, showToast, openSheet, closeSheet, cloudActive, uid]);
+  }, [state, sheet, toastMsg, showToast, openSheet, closeSheet, cloudActive, uid, settingsReady]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
